@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>モダンLINE風チャット（QR読取対応）</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<title>モダンLINE風チャット（QR読取対応・自動ログイン）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   body {
     margin: 0;
@@ -54,7 +54,7 @@
     margin-bottom:15px;
   }
   #my-qr {
-    margin: 10px;
+    margin: 10px auto;
   }
   #friend-section, #qr-reader, #notifications {
     width: 100%;
@@ -104,6 +104,11 @@
     background:#fff;
     border-bottom-left-radius:0;
   }
+  .msg-meta {
+    font-size: 0.7rem;
+    color: gray;
+    margin-top: 3px;
+  }
   #input-area {
     display:flex;
   }
@@ -112,49 +117,34 @@
     margin-right:5px;
     border-radius:20px;
     border:1px solid #ccc;
-    padding:10px;
+    padding:10px 15px;
+    font-size: 1rem;
   }
   #input-area button {
     width:80px;
     border-radius:20px;
     background:#128c7e;
-    border:none;
     color:#fff;
+    border:none;
     font-weight:bold;
     cursor:pointer;
+    transition: background-color 0.3s;
   }
   #input-area button:hover {
     background:#0e755f;
   }
   #notifications {
-    display:none;
+    max-height: 150px;
+    overflow-y: auto;
   }
   .notification {
     border-bottom: 1px solid #ddd;
-    padding: 10px 0;
+    padding: 8px 5px;
   }
-  .notif-text {
-    margin-bottom: 8px;
-  }
-  .notif-buttons button {
-    margin-right: 10px;
-    padding: 5px 10px;
-    border-radius: 5px;
-    border: none;
-    cursor: pointer;
-  }
-  .btn-accept {
-    background-color: #128c7e;
-    color: white;
-  }
-  .btn-accept:hover {
-    background-color: #0e755f;
-  }
-  .btn-reject {
-    background-color: #ccc;
-  }
-  .btn-reject:hover {
-    background-color: #aaa;
+  .notification button {
+    margin-left: 5px;
+    font-size: 0.8rem;
+    padding: 3px 7px;
   }
 </style>
 </head>
@@ -162,8 +152,8 @@
 <header>モダンLINE風チャット</header>
 
 <div id="auth">
-  <input id="user" placeholder="ユーザー名">
-  <input id="pass" type="password" placeholder="パスワード">
+  <input id="user" placeholder="ユーザー名" />
+  <input id="pass" type="password" placeholder="パスワード" />
   <button class="primary" onclick="register()">新規登録</button>
   <button class="primary" onclick="login()">ログイン</button>
   <p id="auth-msg" style="color:red;"></p>
@@ -171,14 +161,18 @@
 
 <div id="main">
   <div id="info">
-    <span>ようこそ、<strong id="uname"></strong> さん<br>あなたのID：<strong id="uid"></strong></span>
+    <span>ようこそ、<strong id="uname"></strong> さん<br />あなたのID：<strong id="uid"></strong></span>
     <div id="my-qr"></div>
+    <button class="primary" onclick="logout()" style="margin-top:10px;">ログアウト</button>
   </div>
 
-  <div id="notifications"></div>
+  <div id="notifications">
+    <h4>通知</h4>
+    <div id="notification-list"></div>
+  </div>
 
   <div id="friend-section">
-    <input id="friend-id" placeholder="相手のUID">
+    <input id="friend-id" placeholder="相手のUID" />
     <button class="primary" onclick="sendFriendRequest()">友達追加リクエスト送信</button>
     <button class="primary" onclick="startQR()">QR読み取り</button>
     <div id="qr-reader" style="display:none;"></div>
@@ -189,7 +183,7 @@
   <div id="chat">
     <div id="messages"></div>
     <div id="input-area">
-      <input id="msg-text" placeholder="メッセージ">
+      <input id="msg-text" placeholder="メッセージ" />
       <button id="send-btn">送信</button>
     </div>
   </div>
@@ -213,51 +207,52 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 let currentUID = "", currentName = "", currentThread = "";
-let friendRequests = [];
-let unsubscribeRequests = null;
 let approvedFriends = [];
+let friendRequests = [];
 
-function genUID(name){
-  const r = Math.random().toString(36).substr(2,6);
+function genUID(name) {
+  const r = Math.random().toString(36).substr(2, 6);
   return `uid_${name}_${r}`;
 }
 
-async function register(){
+async function register() {
   const u = document.getElementById("user").value.trim(),
-        p = document.getElementById("pass").value;
-  if(!u || !p){ showAuthMsg("全て入力してください"); return; }
-
-  // ユーザー名重複チェック
-  const existing = await db.collection("users").where("username", "==", u).get();
-  if(!existing.empty){
-    showAuthMsg("そのユーザー名は既に使われています");
+    p = document.getElementById("pass").value;
+  if (!u || !p) {
+    showAuthMsg("全て入力してください");
     return;
   }
-
-  const uid = genUID(u);
-  try {
-    await db.collection("users").add({
-      username: u,
-      password: p,
-      uid: uid,
-      friends: [],
-      pendingRequests: []
-    });
-    showAuthMsg("登録完了。ログインしてください。");
-  } catch(e) {
-    console.error("登録エラー:", e);
-    showAuthMsg("登録に失敗しました");
+  // 重複チェック
+  const exists = await db.collection("users").where("username", "==", u).get();
+  if (!exists.empty) {
+    showAuthMsg("ユーザー名は既に使用されています");
+    return;
   }
+  const uid = genUID(u);
+  await db.collection("users").add({ username: u, password: p, uid, friends: [], pendingRequests: [] });
+  showAuthMsg("登録完了。ログインしてください。");
 }
 
-function showAuthMsg(msg){ document.getElementById("auth-msg").innerText = msg; }
+function showAuthMsg(msg) {
+  document.getElementById("auth-msg").innerText = msg;
+}
 
-async function login(){
+async function login() {
   const u = document.getElementById("user").value.trim(),
-        p = document.getElementById("pass").value;
-  const snap = await db.collection("users")
-    .where("username", "==", u).where("password", "==", p).get();
-  if(snap.empty){ showAuthMsg("認証失敗"); return; }
+    p = document.getElementById("pass").value;
+  if (!u || !p) {
+    showAuthMsg("全て入力してください");
+    return false;
+  }
+  const snap = await db
+    .collection("users")
+    .where("username", "==", u)
+    .where("password", "==", p)
+    .get();
+  if (snap.empty) {
+    showAuthMsg("認証失敗");
+    return false;
+  }
   const d = snap.docs[0].data();
   currentName = d.username;
   currentUID = d.uid;
@@ -266,110 +261,193 @@ async function login(){
   document.getElementById("uname").innerText = currentName;
   document.getElementById("uid").innerText = currentUID;
   new QRCode(document.getElementById("my-qr"), { text: currentUID, width: 128, height: 128 });
+  localStorage.setItem("chatUser", JSON.stringify({ username: currentName, uid: currentUID, password: p }));
+  approvedFriends = [];
+  friendRequests = [];
   loadFriends();
   setupFriendRequestsListener();
-  localStorage.setItem("chatUser", JSON.stringify({ username: currentName, uid: currentUID }));
+  return true;
 }
 
-async function sendFriendRequest(){
-  const fid = document.getElementById("friend-id").value.trim();
-  if(!fid){
-    alert("相手のUIDを入力してください");
-    return;
-  }
-  if(fid === currentUID){
-    alert("自分のIDは追加できません");
-    return;
-  }
-
-  // 相手のユーザーdoc取得
-  const snap = await db.collection("users").where("uid", "==", fid).get();
-  if(snap.empty){
-    alert("そのUIDのユーザーは存在しません");
-    return;
-  }
-  const doc = snap.docs[0];
-  const d = doc.data();
-
-  // 既に友達か、申請済か確認
-  if(d.friends && d.friends.includes(currentUID)){
-    alert("すでに友達です");
-    return;
-  }
-  if(d.pendingRequests && d.pendingRequests.includes(currentUID)){
-    alert("すでに申請済みです");
-    return;
-  }
-
-  // 申請リストに追加
-  const newPending = d.pendingRequests ? [...d.pendingRequests, currentUID] : [currentUID];
-  await db.collection("users").doc(doc.id).update({ pendingRequests: newPending });
-
-  alert("友達追加リクエストを送信しました");
-  document.getElementById("friend-id").value = "";
+function logout() {
+  localStorage.removeItem("chatUser");
+  location.reload();
 }
 
-function setupFriendRequestsListener(){
-  if(unsubscribeRequests) unsubscribeRequests();
-  unsubscribeRequests = db.collection("users").where("uid", "==", currentUID)
-    .onSnapshot(snap => {
-      if(snap.empty) return;
-      const d = snap.docs[0].data();
-      friendRequests = d.pendingRequests || [];
-      showNotifications();
+async function loadFriends() {
+  const list = document.getElementById("friend-list");
+  list.innerHTML = "";
+  const s = await db.collection("users").where("uid", "==", currentUID).get();
+  if (s.empty) return;
+  approvedFriends = s.docs[0].data().friends || [];
+  friendRequests = s.docs[0].data().pendingRequests || [];
+
+  // 友達だけリスト表示
+  for (const fid of approvedFriends) {
+    const fSnap = await db.collection("users").where("uid", "==", fid).get();
+    if (fSnap.empty) continue;
+    const fn = fSnap.docs[0].data().username;
+    const btn = document.createElement("button");
+    btn.innerText = fn;
+    btn.onclick = () => openChat(fid, fn);
+    list.append(btn);
+  }
+  showNotifications();
+}
+
+function getThread(u1, u2) {
+  return [u1, u2].sort().join("__");
+}
+
+function openChat(fid, fname) {
+  currentThread = getThread(currentUID, fid);
+  document.getElementById("messages").innerHTML = "";
+  db.collection("messages")
+    .doc(currentThread)
+    .collection("messages")
+    .orderBy("timestamp")
+    .onSnapshot((ss) => {
+      const mdiv = document.getElementById("messages");
+      mdiv.innerHTML = "";
+      ss.forEach((d) => {
+        const m = d.data();
+        const el = document.createElement("div");
+        el.className = "message " + (m.name === currentName ? "my-message" : "other-message");
+        el.innerHTML = `${m.name}: ${m.text} <div class="msg-meta">${m.timestamp ? m.timestamp.toDate().toLocaleString() : ""} ${m.read ? "✔✔" : ""}</div>`;
+        mdiv.append(el);
+
+        // 既読処理
+        if (m.name !== currentName && !m.read) {
+          d.ref.update({ read: true });
+        }
+      });
+      mdiv.scrollTop = mdiv.scrollHeight;
     });
 }
 
-function showNotifications(){
-  const container = document.getElementById("notifications");
-  if(friendRequests.length === 0){
-    container.style.display = "none";
-    container.innerHTML = "";
-    return;
-  }
-  container.style.display = "block";
+document.getElementById("send-btn").onclick = () => {
+  const t = document.getElementById("msg-text").value.trim();
+  if (!t || !currentThread) return;
+  db.collection("messages")
+    .doc(currentThread)
+    .collection("messages")
+    .add({ name: currentName, text: t, timestamp: firebase.firestore.FieldValue.serverTimestamp(), read: false });
+  document.getElementById("msg-text").value = "";
+};
 
-  container.innerHTML = "";
-  friendRequests.forEach(fid => {
-    db.collection("users").where("uid", "==", fid).get().then(snap => {
-      if(snap.empty) return;
-      const name = snap.docs[0].data().username;
-
-      if(!container.querySelector(`[data-uid="${fid}"]`)){
-        const notif = document.createElement("div");
-        notif.className = "notification";
-        notif.dataset.uid = fid;
-        notif.innerHTML = `
-          <div class="notif-text">${escapeHtml(name)} さんから友達追加リクエストが届いています。</div>
-          <div class="notif-buttons">
-            <button class="btn-accept" onclick="acceptFriend('${fid}')">承認</button>
-            <button class="btn-reject" onclick="rejectFriend('${fid}')">拒否</button>
-          </div>`;
-        container.appendChild(notif);
-      }
-    });
+function startQR() {
+  document.getElementById("qr-reader").style.display = "block";
+  new Html5Qrcode("qr-reader").start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    (qr) => {
+      document.getElementById("friend-id").value = qr;
+      alert("読み取り完了！");
+      stopQR();
+    }
+  );
+}
+function stopQR() {
+  Html5Qrcode.getCameras().then(() => {
+    const qrReader = document.getElementById("qr-reader");
+    qrReader.style.display = "none";
   });
 }
 
-async function acceptFriend(fid){
+// --- 通知機能 ---
+
+async function sendFriendRequest() {
+  const fid = document.getElementById("friend-id").value.trim();
+  if (!fid) return alert("相手のUIDを入力してください");
+  if (fid === currentUID) return alert("自分自身は追加できません");
+
+  // 相手のユーザードキュメント
+  const snap = await db.collection("users").where("uid", "==", fid).get();
+  if (snap.empty) return alert("相手が存在しません");
+
+  const doc = snap.docs[0];
+  const data = doc.data();
+
+  // すでに友達か確認
+  if (data.friends && data.friends.includes(currentUID)) {
+    return alert("既に友達です");
+  }
+  // すでにリクエスト送信済みか
+  if (data.pendingRequests && data.pendingRequests.includes(currentUID)) {
+    return alert("既にリクエスト送信済みです");
+  }
+
+  // 相手のpendingRequestsにcurrentUIDを追加
+  let pr = data.pendingRequests || [];
+  pr.push(currentUID);
+  await db.collection("users").doc(doc.id).update({ pendingRequests: pr });
+
+  alert("友達リクエストを送信しました");
+}
+
+function setupFriendRequestsListener() {
+  // 自分のpendingRequestsを監視し通知表示
+  db.collection("users")
+    .where("uid", "==", currentUID)
+    .onSnapshot((snap) => {
+      if (snap.empty) return;
+      const data = snap.docs[0].data();
+      friendRequests = data.pendingRequests || [];
+      approvedFriends = data.friends || [];
+      showNotifications();
+      loadFriends();
+    });
+}
+
+function showNotifications() {
+  const container = document.getElementById("notification-list");
+  container.innerHTML = "";
+
+  friendRequests.forEach(async (fid) => {
+    // 相手の名前取得
+    const snap = await db.collection("users").where("uid", "==", fid).get();
+    if (snap.empty) return;
+    const name = snap.docs[0].data().username;
+
+    const div = document.createElement("div");
+    div.className = "notification";
+    div.innerHTML = `${name} さんから友達追加リクエストが届いています。`;
+
+    const btnAccept = document.createElement("button");
+    btnAccept.innerText = "承認";
+    btnAccept.onclick = () => acceptFriend(fid);
+
+    const btnReject = document.createElement("button");
+    btnReject.innerText = "拒否";
+    btnReject.onclick = () => rejectFriend(fid);
+
+    div.appendChild(btnAccept);
+    div.appendChild(btnReject);
+    container.appendChild(div);
+  });
+}
+
+async function acceptFriend(fid) {
+  // 自分のドキュメント取得
   const s1 = await db.collection("users").where("uid", "==", currentUID).get();
-  if(s1.empty) return;
+  if (s1.empty) return;
   const doc1 = s1.docs[0];
   const d1 = doc1.data();
 
+  // 相手のドキュメント取得
   const s2 = await db.collection("users").where("uid", "==", fid).get();
-  if(s2.empty) return;
+  if (s2.empty) return;
   const doc2 = s2.docs[0];
   const d2 = doc2.data();
 
   let f1 = d1.friends || [];
-  if(!f1.includes(fid)) f1.push(fid);
+  if (!f1.includes(fid)) f1.push(fid);
 
   let f2 = d2.friends || [];
-  if(!f2.includes(currentUID)) f2.push(currentUID);
+  if (!f2.includes(currentUID)) f2.push(currentUID);
 
   let pr = d1.pendingRequests || [];
-  pr = pr.filter(x => x !== fid);
+  pr = pr.filter((x) => x !== fid);
 
   await db.collection("users").doc(doc1.id).update({ friends: f1, pendingRequests: pr });
   await db.collection("users").doc(doc2.id).update({ friends: f2 });
@@ -382,139 +460,38 @@ async function acceptFriend(fid){
   alert("友達追加が承認されました。チャットが可能です。");
 }
 
-async function rejectFriend(fid){
-  const s = await db.collection("users").where("uid", "==", currentUID).get();
-  if(s.empty) return;
-  const doc = s.docs[0];
-  const d = doc.data();
-  let pr = d.pendingRequests || [];
-  pr = pr.filter(x => x !== fid);
-  await db.collection("users").doc(doc.id).update({ pendingRequests: pr });
+async function rejectFriend(fid) {
+  const s1 = await db.collection("users").where("uid", "==", currentUID).get();
+  if (s1.empty) return;
+  const doc1 = s1.docs[0];
+  const d1 = doc1.data();
 
+  let pr = d1.pendingRequests || [];
+  pr = pr.filter((x) => x !== fid);
+
+  await db.collection("users").doc(doc1.id).update({ pendingRequests: pr });
   friendRequests = pr;
   showNotifications();
 }
 
-async function loadFriends(){
-  const list = document.getElementById("friend-list");
-  list.innerHTML = "";
-  const s = await db.collection("users").where("uid", "==", currentUID).get();
-  if(s.empty) return;
-  const fr = s.docs[0].data().friends || [];
-  approvedFriends = fr;
+// --- 自動ログイン ---
 
-  for(const fid of fr){
-    const fSnap = await db.collection("users").where("uid", "==", fid).get();
-    if(fSnap.empty) continue;
-    const fn = fSnap.docs[0].data().username;
-    const btn = document.createElement("button");
-    btn.innerText = fn;
-    btn.onclick = () => openChat(fid, fn);
-    list.append(btn);
-  }
-}
-
-function getThread(u1, u2){
-  return [u1, u2].sort().join("__");
-}
-
-let messageUnsubscribe = null;
-function openChat(fid, fname){
-  currentThread = getThread(currentUID, fid);
-  document.getElementById("messages").innerHTML = "";
-
-  if(messageUnsubscribe) messageUnsubscribe();
-
-  messageUnsubscribe = db.collection("messages").doc(currentThread).collection("messages")
-    .orderBy("timestamp").onSnapshot(ss => {
-      const mdiv = document.getElementById("messages");
-      mdiv.innerHTML = "";
-
-      ss.forEach(d => {
-        const m = d.data();
-        const el = document.createElement("div");
-        el.className = "message " + (m.name === currentName ? "my-message" : "other-message");
-
-        // 既読表示：✔か✔✔
-        const isRead = m.readBy && m.readBy.includes(currentUID);
-        const checkmark = m.name === currentName ? (isRead ? "✔✔" : "✔") : "";
-
-        // 時刻表示
-        const timeStr = formatTimestamp(m.timestamp);
-
-        el.innerHTML = `<strong>${escapeHtml(m.name)}</strong>: ${escapeHtml(m.text)} <br><small>${timeStr} ${checkmark}</small>`;
-
-        mdiv.append(el);
-
-        // 自分が受信側なら既読にする
-        if(m.name !== currentName && !(m.readBy && m.readBy.includes(currentUID))){
-          d.ref.update({
-            readBy: firebase.firestore.FieldValue.arrayUnion(currentUID)
-          });
-        }
-      });
-      mdiv.scrollTop = mdiv.scrollHeight;
-  });
-}
-
-document.getElementById("send-btn").onclick = () => {
-  const t = document.getElementById("msg-text").value.trim();
-  if(!t || !currentThread) return;
-  db.collection("messages").doc(currentThread).collection("messages")
-    .add({
-      name: currentName,
-      text: t,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      readBy: [currentUID] // 送信者は既読扱い
-    });
-  document.getElementById("msg-text").value = "";
-};
-
-function startQR(){
-  const qrDiv = document.getElementById("qr-reader");
-  qrDiv.style.display = "block";
-  const html5QrCode = new Html5Qrcode("qr-reader");
-  html5QrCode.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    qr => {
-      document.getElementById("friend-id").value = qr;
-      alert("QRコード読み取り完了！");
-      html5QrCode.stop();
-      qrDiv.style.display = "none";
-    }
-  ).catch(err => {
-    alert("QRコードの起動に失敗しました:" + err);
-  });
-}
-
-function formatTimestamp(ts){
-  if(!ts) return "";
-  let date = ts.toDate ? ts.toDate() : new Date(ts);
-  let h = date.getHours().toString().padStart(2, "0");
-  let m = date.getMinutes().toString().padStart(2, "0");
-  let s = date.getSeconds().toString().padStart(2, "0");
-  return `${h}:${m}:${s}`;
-}
-
-function escapeHtml(text){
-  return text.replace(/[&<>"']/g, m => ({
-    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-  })[m]);
-}
-
-// ページ読み込み時にローカルストレージからログイン復元
-window.onload = () => {
+window.onload = async () => {
   const saved = localStorage.getItem("chatUser");
-  if(saved){
+  if (saved) {
     try {
       const obj = JSON.parse(saved);
-      if(obj && obj.username && obj.uid){
+      if (obj && obj.username && obj.uid && obj.password) {
         document.getElementById("user").value = obj.username;
-        document.getElementById("pass").value = "";
-        login();
+        document.getElementById("pass").value = obj.password;
+        const success = await login();
+        if (!success) {
+          localStorage.removeItem("chatUser");
+        }
       }
-    } catch(e){}
+    } catch (e) {
+      console.error(e);
+    }
   }
 };
 </script>
