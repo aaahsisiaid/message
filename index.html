@@ -2,127 +2,108 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>LINE風チャット</title>
+  <title>LINE風チャット（サブネーム＋文字通話対応）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      margin: 0;
-      font-family: "Helvetica Neue", Arial, sans-serif;
-      background: #e5ddd5;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      margin: 0; font-family: "Helvetica Neue", Arial, sans-serif;
+      background: #e5ddd5; display: flex; flex-direction: column; height: 100vh;
     }
     header {
-      background: #075e54;
-      color: #fff;
-      padding: 15px;
-      text-align: center;
-      font-size: 1.2rem;
+      background: #075e54; color: #fff; padding: 15px; text-align: center; font-size: 1.2rem;
     }
     #auth, #main {
-      flex: 1;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      padding: 15px;
-      overflow-y: auto;
+      flex: 1; display: none; flex-direction: column; align-items: center; padding: 15px; overflow-y: auto;
     }
     #auth { display: flex; }
     input, button {
-      font-size: 1rem;
-      padding: 8px;
-      margin: 4px 0;
-      width: 100%;
-      max-width: 300px;
-      box-sizing: border-box;
-      border-radius: 5px;
-      border: 1px solid #ccc;
+      font-size: 1rem; padding: 8px; margin: 4px 0; width: 100%; max-width: 300px;
+      box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc;
     }
     button.primary {
-      background: #128c7e;
-      color: white;
-      border: none;
-      cursor: pointer;
+      background: #128c7e; color: white; border: none; cursor: pointer;
     }
     button.primary:hover {
       background: #0e755f;
     }
-    #info, #friend-section, #chat, #notification-box {
-      width: 100%;
-      max-width: 500px;
-      background: #fff;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 15px;
+    #info, #friend-section, #chat, #notification-box, #textcall-ui {
+      width: 100%; max-width: 500px; background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 15px;
     }
     #friend-list button, #notification-list button {
-      width: 100%;
-      margin: 5px 0;
-      text-align: left;
-      background: #fff;
-      border: 1px solid #ddd;
+      width: 100%; margin: 5px 0; text-align: left; background: #fff; border: 1px solid #ddd;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .subname-edit-btn {
+      background: none; border: none; cursor: pointer; font-size: 1.2em; color: #888;
+      margin-left: 8px;
     }
     #messages {
-      flex: 1;
-      background: #fff;
-      padding: 10px;
-      border-radius: 10px;
-      overflow-y: auto;
-      margin-bottom: 10px;
-      height: 300px;
+      flex: 1; background: #fff; padding: 10px; border-radius: 10px; overflow-y: auto;
+      margin-bottom: 10px; height: 300px;
     }
     .message {
-      max-width: 70%;
-      margin: 5px;
-      padding: 10px;
-      border-radius: 10px;
-      word-break: break-word;
-      position: relative;
+      max-width: 70%; margin: 5px; padding: 10px; border-radius: 10px; word-break: break-word; position: relative;
     }
     .my-message {
-      align-self: flex-end;
-      background: #dcf8c6;
-      border-bottom-right-radius: 0;
+      align-self: flex-end; background: #dcf8c6; border-bottom-right-radius: 0;
     }
     .other-message {
-      align-self: flex-start;
-      background: #fff;
-      border-bottom-left-radius: 0;
+      align-self: flex-start; background: #fff; border-bottom-left-radius: 0;
     }
     .msg-meta {
-      font-size: 0.7em;
-      color: gray;
-      margin-top: 4px;
+      font-size: 0.7em; color: gray; margin-top: 4px;
     }
     #input-area {
-      display: flex;
-      margin-top: 10px;
+      display: flex; margin-top: 10px;
     }
     #input-area input {
-      flex: 1;
-      margin-right: 5px;
-      border-radius: 20px;
-      border: 1px solid #ccc;
-      padding: 10px;
+      flex: 1; margin-right: 5px; border-radius: 20px; border: 1px solid #ccc; padding: 10px;
     }
     #input-area button {
-      width: 80px;
-      border-radius: 20px;
+      width: 80px; border-radius: 20px;
     }
     #live-typing {
-      font-size: 0.9em;
-      color: #555;
-      margin-bottom: 5px;
-      text-align: center;
+      font-size: 0.9em; color: #555; margin-bottom: 5px; text-align: center;
     }
     .delete-btn {
-      position: absolute;
-      top: 2px;
-      right: 6px;
-      font-size: 0.8em;
+      position: absolute; top: 2px; right: 6px; font-size: 0.8em; cursor: pointer; color: red;
+    }
+    /* 文字通話UI */
+    #textcall-ui {
+      display: none; flex-direction: column; height: 350px;
+    }
+    #textcall-area {
+      flex: 1; background: #fff; border-radius: 10px; padding: 10px; overflow-y: auto; margin-bottom: 10px;
+      font-family: monospace; white-space: pre-wrap;
+    }
+    #textcall-input-area {
+      display: flex;
+    }
+    #textcall-input {
+      flex: 1; border-radius: 20px; border: 1px solid #ccc; padding: 10px;
+    }
+    #textcall-end-btn {
+      width: 80px; border-radius: 20px; background: #cc3333; color: white; border: none; cursor: pointer;
+      margin-left: 5px;
+    }
+    #textcall-end-btn:hover {
+      background: #aa0000;
+    }
+    /* 文字通話開始ボタン */
+    #start-textcall-btn {
+      margin-bottom: 15px;
+      width: 100%;
+      max-width: 500px;
+      background: #075e54;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px;
       cursor: pointer;
-      color: red;
+      font-size: 1.1rem;
+    }
+    #start-textcall-btn:hover {
+      background: #044d44;
     }
   </style>
 </head>
@@ -130,14 +111,14 @@
 <header>モダンLINE風チャット</header>
 
 <div id="auth">
-  <input id="user" placeholder="ユーザー名">
-  <input id="pass" type="password" placeholder="パスワード">
+  <input id="user" placeholder="ユーザー名" autocomplete="username">
+  <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password">
   <button class="primary" onclick="register()">新規登録</button>
   <button class="primary" onclick="login()">ログイン</button>
   <p id="auth-msg" style="color:red;"></p>
 </div>
 
-<div id="main">
+<div id="main" style="display:none;">
   <div id="info">
     <span>ようこそ、<strong id="uname"></strong> さん<br>あなたのID：<strong id="uid"></strong></span>
     <button id="logout-btn" class="primary">ログアウト</button>
@@ -158,15 +139,26 @@
     <div id="friend-list"></div>
   </div>
 
+  <button id="start-textcall-btn" onclick="startTextCall()" style="display:none;">文字通話開始</button>
+
   <div id="chat">
     <div id="live-typing"></div>
     <div id="messages"></div>
     <div id="input-area">
-      <input id="msg-text" placeholder="メッセージ">
+      <input id="msg-text" placeholder="メッセージ" autocomplete="off">
       <button id="send-btn" class="primary">送信</button>
     </div>
   </div>
+
+  <div id="textcall-ui">
+    <div id="textcall-area"></div>
+    <div id="textcall-input-area">
+      <input id="textcall-input" placeholder="文字通話入力" autocomplete="off" />
+      <button id="textcall-end-btn" onclick="endTextCall()">終了</button>
+    </div>
+  </div>
 </div>
+
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -185,8 +177,10 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 let currentUID = "", currentName = "", currentThread = "", subNames = {}, typingTimeout;
+let textCallActive = false;
+let textCallThread = "";
+let textCallListener = null;
 
-// 自動ログインチェック
 window.onload = () => {
   const u = localStorage.getItem("user");
   const p = localStorage.getItem("pass");
@@ -241,6 +235,7 @@ document.getElementById("logout-btn").onclick = () => {
   localStorage.clear();
   location.reload();
 };
+
 async function addFriend(){
   const fid=document.getElementById("friend-id").value.trim();
   if(!fid || fid===currentUID) return alert("無効なID");
@@ -248,7 +243,6 @@ async function addFriend(){
   const meSnap = await db.collection("users").where("uid","==",currentUID).get();
   const youSnap = await db.collection("users").where("uid","==",fid).get();
   if (youSnap.empty) return alert("相手が見つかりません");
-  const myDoc = meSnap.docs[0];
   const yourDoc = youSnap.docs[0];
   const reqs = yourDoc.data().requests || [];
 
@@ -291,6 +285,7 @@ async function loadFriends(){
   list.innerHTML="";
   const snap=await db.collection("users").where("uid","==",currentUID).get();
   const fr=snap.docs[0].data().friends||[];
+  subNames = snap.docs[0].data().subNames || {};
   const added = new Set();
   for(const fid of fr){
     if(added.has(fid)) continue;
@@ -299,11 +294,40 @@ async function loadFriends(){
     if(fSnap.empty) continue;
     const fdoc=fSnap.docs[0].data();
     const btn=document.createElement("button");
-    const sub = subNames[fid] ? `（${subNames[fid]}）` : "";
-    btn.innerText=fdoc.username + sub;
-    btn.onclick=()=>openChat(fid,fdoc.username);
+    btn.style.justifyContent = "space-between";
+
+    const subNameText = subNames[fid] ? `（${subNames[fid]}）` : "";
+    const nameSpan = document.createElement("span");
+    nameSpan.innerText = fdoc.username + subNameText;
+
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✎";
+    editBtn.className = "subname-edit-btn";
+    editBtn.onclick = () => openSubNameEditor(fid, fdoc.username);
+
+    btn.appendChild(nameSpan);
+    btn.appendChild(editBtn);
+
+    btn.onclick = () => openChat(fid, fdoc.username);
     list.append(btn);
   }
+}
+
+function openSubNameEditor(fid, username){
+  const newSub = prompt(`${username} さんのサブネームを入力してください（空欄で削除）`, subNames[fid] || "");
+  if (newSub !== null) {
+    if (newSub.trim() === "") delete subNames[fid];
+    else subNames[fid] = newSub.trim();
+    updateSubNames();
+  }
+}
+
+async function updateSubNames(){
+  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
+  if(meSnap.empty) return;
+  const meDoc = meSnap.docs[0];
+  await db.collection("users").doc(meDoc.id).update({subNames});
+  loadFriends();
 }
 
 function getThread(u1,u2){ return [u1,u2].sort().join("__"); }
@@ -312,7 +336,14 @@ function openChat(fid,fname){
   currentThread=getThread(currentUID,fid);
   document.getElementById("messages").innerHTML="";
   document.getElementById("msg-text").value="";
+  document.getElementById("start-textcall-btn").style.display = "inline-block";
+  loadMessages();
   listenTyping(fid);
+  endTextCall();
+}
+
+// メッセージ読み込み＋既読表示・送信取消・送信時間表示
+function loadMessages(){
   db.collection("messages").doc(currentThread).collection("messages")
     .orderBy("timestamp").onSnapshot(ss=>{
       const mdiv=document.getElementById("messages");
@@ -396,14 +427,73 @@ function listenTyping(fid){
   });
 }
 
+// -------------------
+// 文字通話モード処理
+// -------------------
+
+document.getElementById("start-textcall-btn").onclick = startTextCall;
+
+function startTextCall(){
+  if(!currentThread) {
+    alert("チャットを開いてから開始してください");
+    return;
+  }
+  textCallActive = true;
+  textCallThread = currentThread;
+  document.getElementById("chat").style.display = "none";
+  document.getElementById("textcall-ui").style.display = "flex";
+  document.getElementById("start-textcall-btn").style.display = "none";
+  document.getElementById("textcall-area").innerText = "";
+  listenTextCall();
+}
+
+function endTextCall(){
+  if(textCallListener) textCallListener();
+  textCallActive = false;
+  textCallThread = "";
+  document.getElementById("chat").style.display = "flex";
+  document.getElementById("textcall-ui").style.display = "none";
+  document.getElementById("start-textcall-btn").style.display = currentThread ? "inline-block" : "none";
+}
+
+document.getElementById("textcall-input").addEventListener("input", e => {
+  if(!textCallActive) return;
+  const val = e.target.value;
+  db.collection("textcall").doc(textCallThread).set({ [currentUID]: val }, { merge: true });
+});
+
+function listenTextCall(){
+  if(textCallListener) textCallListener();
+  textCallListener = db.collection("textcall").doc(textCallThread).onSnapshot(doc => {
+    const data = doc.data();
+    if(!data) return;
+    let otherText = "";
+    for(const [uid, text] of Object.entries(data)){
+      if(uid !== currentUID){
+        otherText = text;
+      }
+    }
+    document.getElementById("textcall-area").innerText = otherText || "";
+  });
+}
+
+// -------------------
+// QRコード読み取り
+// -------------------
+
 function startQR(){
   document.getElementById("qr-reader").style.display="block";
   new Html5Qrcode("qr-reader").start(
     { facingMode: "environment" },
     { fps:10, qrbox:250 },
-    qr=>{ document.getElementById("friend-id").value=qr; alert("読み取り完了！"); }
+    qr=>{
+      document.getElementById("friend-id").value=qr;
+      alert("読み取り完了！");
+      document.getElementById("qr-reader").style.display="none";
+    }
   );
 }
+
 </script>
 </body>
 </html>
