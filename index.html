@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>モダンLINE風チャット（QR読取対応・自動ログイン）</title>
+<title>モダンLINE風チャット（QR・通知・既読対応）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   body {
@@ -19,6 +19,18 @@
     padding: 15px;
     text-align: center;
     font-size: 1.2rem;
+    position: relative;
+  }
+  #logout-btn {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    background: #128c7e;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 10px;
+    cursor: pointer;
   }
   #auth, #main {
     flex: 1;
@@ -44,6 +56,7 @@
     color: white;
     border: none;
     cursor: pointer;
+    transition: background 0.3s ease;
   }
   button.primary:hover {
     background: #0e755f;
@@ -51,10 +64,11 @@
   #info {
     width: 100%;
     max-width: 500px;
-    margin-bottom:15px;
+    margin-bottom: 10px;
+    color: #222;
   }
   #my-qr {
-    margin: 10px auto;
+    margin: 10px 0;
   }
   #friend-section, #qr-reader, #notifications {
     width: 100%;
@@ -63,97 +77,144 @@
     padding: 15px;
     border-radius: 10px;
     margin-bottom: 15px;
+    box-sizing: border-box;
   }
-  #friend-list button {
-    width: 100%;
+  #friend-list > div {
+    display: flex;
+    justify-content: space-between;
     margin: 5px 0;
+  }
+  #friend-list button.friend-name {
+    flex: 1;
+    background: none;
+    border: none;
     text-align: left;
-    background: #fff;
-    border: 1px solid #ddd;
+    padding: 5px 10px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #075e54;
+  }
+  #friend-list button.friend-name:hover {
+    text-decoration: underline;
+  }
+  #friend-list button.edit-subname {
+    background: #128c7e;
+    color: white;
+    border-radius: 5px;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #notifications {
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 0.9rem;
+  }
+  #notifications div {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+  }
+  #notifications div button {
+    margin-left: 10px;
+    background: #128c7e;
+    border: none;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
   }
   #chat {
-    flex:1;
-    width:100%;
-    max-width:500px;
-    display:flex;
-    flex-direction:column;
+    flex: 1;
+    width: 100%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 10px;
+    box-sizing: border-box;
   }
   #messages {
-    flex:1;
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    border-radius: 10px 10px 0 0;
     background: #fff;
-    padding:10px;
-    border-radius:10px;
-    overflow-y:auto;
-    margin-bottom:10px;
   }
   .message {
-    max-width:70%;
-    margin:5px;
-    padding:10px;
-    border-radius:10px;
-    word-break:break-word;
+    max-width: 70%;
+    margin: 5px 0;
+    padding: 10px 12px;
+    border-radius: 18px;
+    word-break: break-word;
     position: relative;
+    font-size: 0.95rem;
+    line-height: 1.2em;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.1);
   }
   .my-message {
-    align-self:flex-end;
-    background:#dcf8c6;
-    border-bottom-right-radius:0;
+    align-self: flex-end;
+    background: #dcf8c6;
+    border-bottom-right-radius: 0;
   }
   .other-message {
-    align-self:flex-start;
-    background:#fff;
-    border-bottom-left-radius:0;
+    align-self: flex-start;
+    background: #fff;
+    border-bottom-left-radius: 0;
   }
   .msg-meta {
     font-size: 0.7rem;
     color: gray;
-    margin-top: 3px;
+    margin-top: 4px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
   }
   #input-area {
-    display:flex;
+    display: flex;
+    padding: 10px;
+    background: #f0f0f0;
+    border-radius: 0 0 10px 10px;
   }
   #input-area input {
-    flex:1;
-    margin-right:5px;
-    border-radius:20px;
-    border:1px solid #ccc;
-    padding:10px 15px;
+    flex: 1;
+    margin-right: 5px;
+    border-radius: 20px;
+    border: 1px solid #ccc;
+    padding: 10px 15px;
     font-size: 1rem;
+    outline: none;
+  }
+  #input-area input:focus {
+    border-color: #128c7e;
   }
   #input-area button {
-    width:80px;
-    border-radius:20px;
-    background:#128c7e;
-    color:#fff;
-    border:none;
-    font-weight:bold;
-    cursor:pointer;
-    transition: background-color 0.3s;
+    width: 80px;
+    border-radius: 20px;
+    background: #128c7e;
+    border: none;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s ease;
   }
   #input-area button:hover {
-    background:#0e755f;
+    background: #0e755f;
   }
-  #notifications {
-    max-height: 150px;
-    overflow-y: auto;
-  }
-  .notification {
-    border-bottom: 1px solid #ddd;
-    padding: 8px 5px;
-  }
-  .notification button {
-    margin-left: 5px;
-    font-size: 0.8rem;
-    padding: 3px 7px;
+  #qr-reader {
+    display: none;
   }
 </style>
 </head>
 <body>
-<header>モダンLINE風チャット</header>
+
+<header>
+  モダンLINE風チャット
+  <button id="logout-btn" style="display:none;">ログアウト</button>
+</header>
 
 <div id="auth">
-  <input id="user" placeholder="ユーザー名" />
-  <input id="pass" type="password" placeholder="パスワード" />
+  <input id="user" placeholder="ユーザー名" autocomplete="username" />
+  <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password" />
   <button class="primary" onclick="register()">新規登録</button>
   <button class="primary" onclick="login()">ログイン</button>
   <p id="auth-msg" style="color:red;"></p>
@@ -161,9 +222,17 @@
 
 <div id="main">
   <div id="info">
-    <span>ようこそ、<strong id="uname"></strong> さん<br />あなたのID：<strong id="uid"></strong></span>
+    <span>ようこそ、<strong id="uname"></strong> さん<br>あなたのID：<strong id="uid"></strong></span>
     <div id="my-qr"></div>
-    <button class="primary" onclick="logout()" style="margin-top:10px;">ログアウト</button>
+  </div>
+
+  <div id="friend-section">
+    <input id="friend-id" placeholder="相手のUIDを入力" />
+    <button class="primary" onclick="sendFriendRequest()">友達追加リクエスト送信</button>
+    <button class="primary" onclick="startQR()">QR読み取り</button>
+    <div id="qr-reader"></div>
+    <h4>友達リスト</h4>
+    <div id="friend-list"></div>
   </div>
 
   <div id="notifications">
@@ -171,19 +240,10 @@
     <div id="notification-list"></div>
   </div>
 
-  <div id="friend-section">
-    <input id="friend-id" placeholder="相手のUID" />
-    <button class="primary" onclick="sendFriendRequest()">友達追加リクエスト送信</button>
-    <button class="primary" onclick="startQR()">QR読み取り</button>
-    <div id="qr-reader" style="display:none;"></div>
-    <h4>友達リスト</h4>
-    <div id="friend-list"></div>
-  </div>
-
   <div id="chat">
     <div id="messages"></div>
     <div id="input-area">
-      <input id="msg-text" placeholder="メッセージ" />
+      <input id="msg-text" placeholder="メッセージを入力..." />
       <button id="send-btn">送信</button>
     </div>
   </div>
@@ -206,9 +266,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-let currentUID = "", currentName = "", currentThread = "";
-let approvedFriends = [];
-let friendRequests = [];
+let currentUID = "", currentName = "", currentUserDocId = "", currentThread = "";
+let approvedFriends = [], friendRequests = [], subNames = {};
 
 function genUID(name) {
   const r = Math.random().toString(36).substr(2, 6);
@@ -216,20 +275,27 @@ function genUID(name) {
 }
 
 async function register() {
-  const u = document.getElementById("user").value.trim(),
-    p = document.getElementById("pass").value;
+  const u = document.getElementById("user").value.trim();
+  const p = document.getElementById("pass").value;
   if (!u || !p) {
     showAuthMsg("全て入力してください");
     return;
   }
-  // 重複チェック
-  const exists = await db.collection("users").where("username", "==", u).get();
-  if (!exists.empty) {
-    showAuthMsg("ユーザー名は既に使用されています");
+  // 同じユーザー名が存在しないかチェック
+  const existing = await db.collection("users").where("username", "==", u).get();
+  if (!existing.empty) {
+    showAuthMsg("そのユーザー名は既に使われています");
     return;
   }
   const uid = genUID(u);
-  await db.collection("users").add({ username: u, password: p, uid, friends: [], pendingRequests: [] });
+  await db.collection("users").add({
+    username: u,
+    password: p,
+    uid,
+    friends: [],
+    pendingRequests: [],
+    subNames: {}
+  });
   showAuthMsg("登録完了。ログインしてください。");
 }
 
@@ -238,11 +304,11 @@ function showAuthMsg(msg) {
 }
 
 async function login() {
-  const u = document.getElementById("user").value.trim(),
-    p = document.getElementById("pass").value;
+  const u = document.getElementById("user").value.trim();
+  const p = document.getElementById("pass").value;
   if (!u || !p) {
     showAuthMsg("全て入力してください");
-    return false;
+    return;
   }
   const snap = await db
     .collection("users")
@@ -251,247 +317,359 @@ async function login() {
     .get();
   if (snap.empty) {
     showAuthMsg("認証失敗");
-    return false;
+    return;
   }
-  const d = snap.docs[0].data();
+  const doc = snap.docs[0];
+  currentUserDocId = doc.id;
+  const d = doc.data();
   currentName = d.username;
   currentUID = d.uid;
+  subNames = d.subNames || {};
   document.getElementById("auth").style.display = "none";
   document.getElementById("main").style.display = "flex";
+  document.getElementById("logout-btn").style.display = "block";
   document.getElementById("uname").innerText = currentName;
   document.getElementById("uid").innerText = currentUID;
   new QRCode(document.getElementById("my-qr"), { text: currentUID, width: 128, height: 128 });
-  localStorage.setItem("chatUser", JSON.stringify({ username: currentName, uid: currentUID, password: p }));
-  approvedFriends = [];
-  friendRequests = [];
-  loadFriends();
+  localStorage.setItem("chatUser", JSON.stringify({ username: currentName, uid: currentUID, password: p, userDocId: currentUserDocId }));
+  await loadFriends();
   setupFriendRequestsListener();
-  return true;
+  clearAuthMsg();
 }
 
-function logout() {
-  localStorage.removeItem("chatUser");
-  location.reload();
+function clearAuthMsg() {
+  document.getElementById("auth-msg").innerText = "";
 }
 
 async function loadFriends() {
   const list = document.getElementById("friend-list");
   list.innerHTML = "";
-  const s = await db.collection("users").where("uid", "==", currentUID).get();
-  if (s.empty) return;
-  approvedFriends = s.docs[0].data().friends || [];
-  friendRequests = s.docs[0].data().pendingRequests || [];
+  const doc = await db.collection("users").doc(currentUserDocId).get();
+  if (!doc.exists) return;
+  const data = doc.data();
+  approvedFriends = data.friends || [];
+  friendRequests = data.pendingRequests || [];
+  subNames = data.subNames || {};
 
-  // 友達だけリスト表示
   for (const fid of approvedFriends) {
     const fSnap = await db.collection("users").where("uid", "==", fid).get();
     if (fSnap.empty) continue;
     const fn = fSnap.docs[0].data().username;
+    const displayName = subNames[fid] || fn;
+
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    container.style.justifyContent = "space-between";
+    container.style.alignItems = "center";
+
     const btn = document.createElement("button");
-    btn.innerText = fn;
-    btn.onclick = () => openChat(fid, fn);
-    list.append(btn);
+    btn.className = "friend-name";
+    btn.innerText = displayName;
+    btn.onclick = () => openChat(fid, displayName);
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "edit-subname";
+    editBtn.innerText = "✏️";
+    editBtn.onclick = () => editSubName(fid, fn);
+
+    container.appendChild(btn);
+    container.appendChild(editBtn);
+    list.appendChild(container);
   }
   showNotifications();
 }
 
+function editSubName(fid, originalName) {
+  const newName = prompt(`「${originalName}」のサブネームを入力してください。空欄で削除。`, subNames[fid] || "");
+  if (newName === null) return; // キャンセル
+  if (newName.trim() === "") {
+    delete subNames[fid];
+  } else {
+    subNames[fid] = newName.trim();
+  }
+  db.collection("users").doc(currentUserDocId).update({ subNames });
+  loadFriends();
+}
+
+// 通知関係
+async function setupFriendRequestsListener() {
+  db.collection("users").doc(currentUserDocId).onSnapshot((doc) => {
+    if (!doc.exists) return;
+    const data = doc.data();
+    friendRequests = data.pendingRequests || [];
+    approvedFriends = data.friends || [];
+    subNames = data.subNames || {};
+    showNotifications();
+    loadFriends();
+  });
+}
+
+function showNotifications() {
+  const notifContainer = document.getElementById("notification-list");
+  notifContainer.innerHTML = "";
+
+  friendRequests.forEach((fid) => {
+    const notifDiv = document.createElement("div");
+    notifDiv.innerText = `ユーザーID ${fid} から友達追加リクエストが届いています。`;
+    const acceptBtn = document.createElement("button");
+    acceptBtn.innerText = "承認";
+    acceptBtn.onclick = () => acceptFriend(fid);
+    notifDiv.appendChild(acceptBtn);
+    notifContainer.appendChild(notifDiv);
+  });
+
+  if (friendRequests.length === 0) {
+    notifContainer.innerText = "通知はありません。";
+  }
+}
+
+// 友達追加リクエスト送信
+async function sendFriendRequest() {
+  const fid = document.getElementById("friend-id").value.trim();
+  if (!fid) {
+    alert("相手のUIDを入力してください。");
+    return;
+  }
+  if (fid === currentUID) {
+    alert("自分自身を追加できません。");
+    return;
+  }
+  // 既に友達かどうかチェック
+  if (approvedFriends.includes(fid)) {
+    alert("既に友達です。");
+    return;
+  }
+  // 相手のユーザー情報取得
+  const s = await db.collection("users").where("uid", "==", fid).get();
+  if (s.empty) {
+    alert("そのUIDのユーザーは存在しません。");
+    return;
+  }
+  const doc = s.docs[0];
+  const d = doc.data();
+  const pending = d.pendingRequests || [];
+  if (pending.includes(currentUID)) {
+    alert("すでに友達追加リクエストを送っています。");
+    return;
+  }
+  // 自分が既に相手の友達なら不要
+  const friendsOfOther = d.friends || [];
+  if (friendsOfOther.includes(currentUID)) {
+    alert("相手はすでにあなたの友達です。");
+    return;
+  }
+  // 相手のpendingRequestsに自分のUID追加
+  pending.push(currentUID);
+  await db.collection("users").doc(doc.id).update({ pendingRequests: pending });
+  alert("友達追加リクエストを送信しました。");
+  document.getElementById("friend-id").value = "";
+}
+
+// 友達追加承認（双方向に追加）
+async function acceptFriend(fid) {
+  if (!fid) return;
+  const meDoc = await db.collection("users").doc(currentUserDocId).get();
+  if (!meDoc.exists) return;
+  const meData = meDoc.data();
+
+  const s2 = await db.collection("users").where("uid", "==", fid).get();
+  if (s2.empty) return;
+  const friendDoc = s2.docs[0];
+  const friendData = friendDoc.data();
+
+  // 自分のfriendsにfid追加（重複除去）
+  let myFriends = meData.friends || [];
+  if (!myFriends.includes(fid)) myFriends.push(fid);
+
+  // 自分のpendingRequestsからfid除去
+  let myPending = meData.pendingRequests || [];
+  myPending = myPending.filter((x) => x !== fid);
+
+  // 相手のfriendsにcurrentUID追加（重複除去）
+  let friendFriends = friendData.friends || [];
+  if (!friendFriends.includes(currentUID)) friendFriends.push(currentUID);
+
+  await db.collection("users").doc(currentUserDocId).update({
+    friends: myFriends,
+    pendingRequests: myPending,
+  });
+  await db.collection("users").doc(friendDoc.id).update({
+    friends: friendFriends,
+  });
+
+  approvedFriends = myFriends;
+  friendRequests = myPending;
+  showNotifications();
+  loadFriends();
+  alert("友達追加が承認されました。チャットが可能です。");
+}
+
+// 既読管理・メッセージ送信
+document.getElementById("send-btn").onclick = async () => {
+  const text = document.getElementById("msg-text").value.trim();
+  if (!text || !currentThread) return;
+  await db
+    .collection("messages")
+    .doc(currentThread)
+    .collection("messages")
+    .add({
+      name: currentName,
+      text: text,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      readBy: [currentUID],
+    });
+  document.getElementById("msg-text").value = "";
+};
+
+// チャット開く
 function getThread(u1, u2) {
   return [u1, u2].sort().join("__");
 }
 
-function openChat(fid, fname) {
+let unsubscribeChat = null;
+
+async function openChat(fid, fname) {
+  if (!approvedFriends.includes(fid)) {
+    alert("友達追加承認されていません。");
+    return;
+  }
   currentThread = getThread(currentUID, fid);
   document.getElementById("messages").innerHTML = "";
-  db.collection("messages")
+  if (unsubscribeChat) unsubscribeChat();
+
+  unsubscribeChat = db
+    .collection("messages")
     .doc(currentThread)
     .collection("messages")
     .orderBy("timestamp")
     .onSnapshot((ss) => {
       const mdiv = document.getElementById("messages");
       mdiv.innerHTML = "";
-      ss.forEach((d) => {
+      ss.forEach(async (d) => {
         const m = d.data();
         const el = document.createElement("div");
         el.className = "message " + (m.name === currentName ? "my-message" : "other-message");
-        el.innerHTML = `${m.name}: ${m.text} <div class="msg-meta">${m.timestamp ? m.timestamp.toDate().toLocaleString() : ""} ${m.read ? "✔✔" : ""}</div>`;
-        mdiv.append(el);
 
-        // 既読処理
-        if (m.name !== currentName && !m.read) {
-          d.ref.update({ read: true });
+        // メッセージ表示テキスト
+        const displayName = m.name === currentName ? currentName : fname;
+        el.innerText = `${displayName}: ${m.text}`;
+
+        // 送信日時表示
+        const ts = m.timestamp ? m.timestamp.toDate() : null;
+        const timeStr = ts ? ts.toLocaleString() : "送信日時不明";
+
+        // 既読表示（✔✔は自分が送信したメッセージも相手のも表示）
+        const isRead = m.readBy && m.readBy.includes(currentUID);
+        const readMark = isRead ? "✔✔" : "✓";
+
+        // メタ情報を付加
+        const meta = document.createElement("div");
+        meta.className = "msg-meta";
+        meta.textContent = `${timeStr} ${readMark}`;
+        el.appendChild(meta);
+
+        mdiv.appendChild(el);
+
+        // 自分が読んだことを既読に追加
+        if (!isRead) {
+          const msgRef = db
+            .collection("messages")
+            .doc(currentThread)
+            .collection("messages")
+            .doc(d.id);
+          await msgRef.update({
+            readBy: firebase.firestore.FieldValue.arrayUnion(currentUID),
+          });
         }
       });
       mdiv.scrollTop = mdiv.scrollHeight;
     });
 }
 
-document.getElementById("send-btn").onclick = () => {
-  const t = document.getElementById("msg-text").value.trim();
-  if (!t || !currentThread) return;
-  db.collection("messages")
-    .doc(currentThread)
-    .collection("messages")
-    .add({ name: currentName, text: t, timestamp: firebase.firestore.FieldValue.serverTimestamp(), read: false });
-  document.getElementById("msg-text").value = "";
-};
-
+// QRコード読み取り開始
 function startQR() {
-  document.getElementById("qr-reader").style.display = "block";
-  new Html5Qrcode("qr-reader").start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    (qr) => {
-      document.getElementById("friend-id").value = qr;
-      alert("読み取り完了！");
-      stopQR();
-    }
-  );
-}
-function stopQR() {
-  Html5Qrcode.getCameras().then(() => {
-    const qrReader = document.getElementById("qr-reader");
-    qrReader.style.display = "none";
-  });
-}
-
-// --- 通知機能 ---
-
-async function sendFriendRequest() {
-  const fid = document.getElementById("friend-id").value.trim();
-  if (!fid) return alert("相手のUIDを入力してください");
-  if (fid === currentUID) return alert("自分自身は追加できません");
-
-  // 相手のユーザードキュメント
-  const snap = await db.collection("users").where("uid", "==", fid).get();
-  if (snap.empty) return alert("相手が存在しません");
-
-  const doc = snap.docs[0];
-  const data = doc.data();
-
-  // すでに友達か確認
-  if (data.friends && data.friends.includes(currentUID)) {
-    return alert("既に友達です");
-  }
-  // すでにリクエスト送信済みか
-  if (data.pendingRequests && data.pendingRequests.includes(currentUID)) {
-    return alert("既にリクエスト送信済みです");
-  }
-
-  // 相手のpendingRequestsにcurrentUIDを追加
-  let pr = data.pendingRequests || [];
-  pr.push(currentUID);
-  await db.collection("users").doc(doc.id).update({ pendingRequests: pr });
-
-  alert("友達リクエストを送信しました");
-}
-
-function setupFriendRequestsListener() {
-  // 自分のpendingRequestsを監視し通知表示
-  db.collection("users")
-    .where("uid", "==", currentUID)
-    .onSnapshot((snap) => {
-      if (snap.empty) return;
-      const data = snap.docs[0].data();
-      friendRequests = data.pendingRequests || [];
-      approvedFriends = data.friends || [];
-      showNotifications();
-      loadFriends();
+  const qrContainer = document.getElementById("qr-reader");
+  qrContainer.style.display = "block";
+  const html5QrCode = new Html5Qrcode("qr-reader");
+  html5QrCode
+    .start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      (qr) => {
+        document.getElementById("friend-id").value = qr;
+        alert("読み取り完了！");
+        html5QrCode.stop();
+        qrContainer.style.display = "none";
+      }
+    )
+    .catch((err) => {
+      console.error("QR読み取りエラー:", err);
     });
 }
 
-function showNotifications() {
-  const container = document.getElementById("notification-list");
-  container.innerHTML = "";
+// ログアウト処理
+document.getElementById("logout-btn").onclick = () => {
+  localStorage.removeItem("chatUser");
+  currentUID = "";
+  currentName = "";
+  currentUserDocId = "";
+  currentThread = "";
+  approvedFriends = [];
+  friendRequests = [];
+  subNames = {};
+  if (unsubscribeChat) unsubscribeChat();
+  document.getElementById("main").style.display = "none";
+  document.getElementById("auth").style.display = "flex";
+  document.getElementById("logout-btn").style.display = "none";
+  document.getElementById("user").value = "";
+  document.getElementById("pass").value = "";
+  document.getElementById("auth-msg").innerText = "";
+  document.getElementById("messages").innerHTML = "";
+  document.getElementById("friend-list").innerHTML = "";
+  document.getElementById("notification-list").innerHTML = "";
+  document.getElementById("my-qr").innerHTML = "";
+};
 
-  friendRequests.forEach(async (fid) => {
-    // 相手の名前取得
-    const snap = await db.collection("users").where("uid", "==", fid).get();
-    if (snap.empty) return;
-    const name = snap.docs[0].data().username;
-
-    const div = document.createElement("div");
-    div.className = "notification";
-    div.innerHTML = `${name} さんから友達追加リクエストが届いています。`;
-
-    const btnAccept = document.createElement("button");
-    btnAccept.innerText = "承認";
-    btnAccept.onclick = () => acceptFriend(fid);
-
-    const btnReject = document.createElement("button");
-    btnReject.innerText = "拒否";
-    btnReject.onclick = () => rejectFriend(fid);
-
-    div.appendChild(btnAccept);
-    div.appendChild(btnReject);
-    container.appendChild(div);
-  });
-}
-
-async function acceptFriend(fid) {
-  // 自分のドキュメント取得
-  const s1 = await db.collection("users").where("uid", "==", currentUID).get();
-  if (s1.empty) return;
-  const doc1 = s1.docs[0];
-  const d1 = doc1.data();
-
-  // 相手のドキュメント取得
-  const s2 = await db.collection("users").where("uid", "==", fid).get();
-  if (s2.empty) return;
-  const doc2 = s2.docs[0];
-  const d2 = doc2.data();
-
-  let f1 = d1.friends || [];
-  if (!f1.includes(fid)) f1.push(fid);
-
-  let f2 = d2.friends || [];
-  if (!f2.includes(currentUID)) f2.push(currentUID);
-
-  let pr = d1.pendingRequests || [];
-  pr = pr.filter((x) => x !== fid);
-
-  await db.collection("users").doc(doc1.id).update({ friends: f1, pendingRequests: pr });
-  await db.collection("users").doc(doc2.id).update({ friends: f2 });
-
-  approvedFriends = f1;
-  friendRequests = pr;
-
-  showNotifications();
-  loadFriends();
-  alert("友達追加が承認されました。チャットが可能です。");
-}
-
-async function rejectFriend(fid) {
-  const s1 = await db.collection("users").where("uid", "==", currentUID).get();
-  if (s1.empty) return;
-  const doc1 = s1.docs[0];
-  const d1 = doc1.data();
-
-  let pr = d1.pendingRequests || [];
-  pr = pr.filter((x) => x !== fid);
-
-  await db.collection("users").doc(doc1.id).update({ pendingRequests: pr });
-  friendRequests = pr;
-  showNotifications();
-}
-
-// --- 自動ログイン ---
-
+// ページロード時にローカルストレージから自動ログイン
 window.onload = async () => {
-  const saved = localStorage.getItem("chatUser");
-  if (saved) {
-    try {
-      const obj = JSON.parse(saved);
-      if (obj && obj.username && obj.uid && obj.password) {
-        document.getElementById("user").value = obj.username;
-        document.getElementById("pass").value = obj.password;
-        const success = await login();
-        if (!success) {
-          localStorage.removeItem("chatUser");
-        }
-      }
-    } catch (e) {
-      console.error(e);
+  const userStr = localStorage.getItem("chatUser");
+  if (!userStr) {
+    document.getElementById("auth").style.display = "flex";
+    return;
+  }
+  try {
+    const user = JSON.parse(userStr);
+    if (!user.username || !user.uid || !user.password || !user.userDocId) {
+      document.getElementById("auth").style.display = "flex";
+      return;
     }
+    // パスワードを使って再認証（簡易）
+    const snap = await db
+      .collection("users")
+      .where("username", "==", user.username)
+      .where("password", "==", user.password)
+      .get();
+    if (snap.empty) {
+      localStorage.removeItem("chatUser");
+      document.getElementById("auth").style.display = "flex";
+      return;
+    }
+    const doc = snap.docs[0];
+    currentUserDocId = doc.id;
+    currentName = user.username;
+    currentUID = user.uid;
+    subNames = doc.data().subNames || {};
+    document.getElementById("auth").style.display = "none";
+    document.getElementById("main").style.display = "flex";
+    document.getElementById("logout-btn").style.display = "block";
+    document.getElementById("uname").innerText = currentName;
+    document.getElementById("uid").innerText = currentUID;
+    new QRCode(document.getElementById("my-qr"), { text: currentUID, width: 128, height: 128 });
+    await loadFriends();
+    setupFriendRequestsListener();
+  } catch (e) {
+    console.error("自動ログインエラー", e);
+    document.getElementById("auth").style.display = "flex";
   }
 };
 </script>
