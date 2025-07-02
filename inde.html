@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>モダンLINE風チャット（自動ログイン＋ログアウト）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0; font-family: "Helvetica Neue", Arial, sans-serif;
+      background: #e5ddd5; display: flex; flex-direction: column; height: 100vh;
+    }
+    header {
+      background: #075e54; color: #fff; padding: 15px; text-align: center; font-size: 1.2rem;
+    }
+    #auth, #main {
+      flex: 1; display: none; flex-direction: column; align-items: center; padding: 15px; overflow-y: auto;
+    }
+    #auth { display: flex; }
+    input, button {
+      font-size: 1rem; padding: 8px; margin: 4px 0; width: 100%; max-width: 300px;
+      box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc;
+    }
+    button.primary {
+      background: #128c7e; color: white; border: none; cursor: pointer;
+    }
+    button.primary:hover { background: #0e755f; }
+    #info { width: 100%; max-width: 500px; margin-bottom:15px; }
+    #my-qr { margin: 10px; }
+    #friend-section, #qr-reader {
+      width: 100%; max-width: 500px; background: #fff; padding: 15px;
+      border-radius: 10px; margin-bottom: 15px;
+    }
+    #friend-list button {
+      width: 100%; margin: 5px 0; text-align: left;
+      background: #fff; border: 1px solid #ddd;
+    }
+    #chat {
+      flex:1; width:100%; max-width:500px; display:flex; flex-direction:column;
+    }
+    #messages {
+      flex:1; background: #fff; padding:10px; border-radius:10px; overflow-y:auto; margin-bottom:10px;
+    }
+    .message {
+      max-width:70%; margin:5px; padding:10px; border-radius:10px;
+      word-break:break-word; position: relative;
+    }
+    .my-message {
+      align-self:flex-end; background:#dcf8c6; border-bottom-right-radius:0;
+    }
+    .other-message {
+      align-self:flex-start; background:#fff; border-bottom-left-radius:0;
+    }
+    #input-area {
+      display:flex;
+    }
+    #input-area input {
+      flex:1; margin-right:5px; border-radius:20px; border:1px solid #ccc; padding:10px;
+    }
+    #input-area button {
+      width:80px; border-radius:20px;
+    }
+  </style>
+</head>
+<body>
+<header>モダンLINE風チャット</header>
+
+<div id="auth">
+  <input id="user" placeholder="ユーザー名">
+  <input id="pass" type="password" placeholder="パスワード">
+  <button class="primary" onclick="register()">新規登録</button>
+  <button class="primary" onclick="login()">ログイン</button>
+  <p id="auth-msg" style="color:red;"></p>
+</div>
+
+<div id="main">
+  <div id="info">
+    <span>ようこそ、<strong id="uname"></strong> さん<br>あなたのID：<strong id="uid"></strong></span>
+    <div id="my-qr"></div>
+    <button class="primary" onclick="logout()">ログアウト</button>
+  </div>
+
+  <div id="friend-section">
+    <input id="friend-id" placeholder="相手のUID">
+    <button class="primary" onclick="addFriend()">友達追加</button>
+    <button class="primary" onclick="startQR()">QR読み取り</button>
+    <div id="qr-reader" style="display:none;"></div>
+    <h4>友達リスト</h4>
+    <div id="friend-list"></div>
+  </div>
+
+  <div id="chat">
+    <div id="messages"></div>
+    <div id="input-area">
+      <input id="msg-text" placeholder="メッセージ">
+      <button id="send-btn" class="primary">送信</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAEdcU79-YWhTVyuaRIKL8Y7uZ3Yujw0Fs",
+  authDomain: "message-95d75.firebaseapp.com",
+  projectId: "message-95d75",
+  storageBucket: "message-95d75.appspot.com",
+  messagingSenderId: "348991178331",
+  appId: "1:348991178331:web:a504a5885f5df5491ba17e",
+  measurementId: "G-LGM9GQK2HK"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let currentUID = "", currentName = "", currentThread = "";
+
+function genUID(name){
+  const r = Math.random().toString(36).substr(2,6);
+  return `uid_${name}_${r}`;
+}
+
+async function register(){
+  const u=document.getElementById("user").value.trim(),
+        p=document.getElementById("pass").value;
+  if(!u||!p){ showAuthMsg("全て入力してください"); return; }
+  const uid=genUID(u);
+  try {
+    await db.collection("users").add({username:u,password:p,uid,friends:[]});
+    showAuthMsg("登録完了。ログインしてください。");
+  } catch(e) {
+    console.error("登録エラー:", e);
+    showAuthMsg("登録に失敗しました");
+  }
+}
+
+function showAuthMsg(msg){ document.getElementById("auth-msg").innerText=msg; }
+
+async function login(){
+  const u=document.getElementById("user").value.trim(),
+        p=document.getElementById("pass").value;
+  const snap = await db.collection("users")
+    .where("username","==",u).where("password","==",p).get();
+  if(snap.empty){ showAuthMsg("認証失敗"); return;}
+  const d=snap.docs[0];
+  currentName=d.data().username;
+  currentUID=d.data().uid;
+  document.getElementById("auth").style.display="none";
+  document.getElementById("main").style.display="flex";
+  document.getElementById("uname").innerText=currentName;
+  document.getElementById("uid").innerText=currentUID;
+  new QRCode(document.getElementById("my-qr"),{text:currentUID,width:128,height:128});
+  localStorage.setItem("chatUser", JSON.stringify({ username: currentName, uid: currentUID }));
+  loadFriends();
+}
+
+function logout(){
+  localStorage.removeItem("chatUser");
+  currentUID = "";
+  currentName = "";
+  currentThread = "";
+  document.getElementById("main").style.display = "none";
+  document.getElementById("auth").style.display = "flex";
+}
+
+async function addFriend(){
+  const fid=document.getElementById("friend-id").value.trim();
+  if(!fid) return;
+  const s=await db.collection("users").where("uid","==",currentUID).get();
+  const doc=s.docs[0],fr=doc.data().friends||[];
+  if(fr.includes(fid)){ alert("既に追加済です"); return; }
+  fr.push(fid);
+  await db.collection("users").doc(doc.id).update({friends:fr});
+  loadFriends();
+}
+
+async function loadFriends(){
+  const list=document.getElementById("friend-list");
+  list.innerHTML="";
+  const s=await db.collection("users").where("uid","==",currentUID).get();
+  const fr=s.docs[0].data().friends||[];
+  for(const fid of fr){
+    const fSnap=await db.collection("users").where("uid","==",fid).get();
+    if(fSnap.empty) continue;
+    const fn=fSnap.docs[0].data().username;
+    const btn=document.createElement("button");
+    btn.innerText=fn;
+    btn.onclick=()=>openChat(fid,fn);
+    list.append(btn);
+  }
+}
+
+function getThread(u1,u2){
+  return [u1,u2].sort().join("__");
+}
+
+function openChat(fid,fname){
+  currentThread=getThread(currentUID,fid);
+  document.getElementById("messages").innerHTML="";
+  db.collection("messages").doc(currentThread).collection("messages")
+    .orderBy("timestamp").onSnapshot(ss=>{
+      const mdiv=document.getElementById("messages");
+      mdiv.innerHTML="";
+      ss.forEach(d=>{
+        const m=d.data();
+        const el=document.createElement("div");
+        el.className="message "+(m.name===currentName?"my-message":"other-message");
+        el.innerText=`${m.name}: ${m.text}`;
+        mdiv.append(el);
+      });
+      mdiv.scrollTop=mdiv.scrollHeight;
+  });
+}
+
+document.getElementById("send-btn").onclick=()=>{
+  const t=document.getElementById("msg-text").value.trim();
+  if(!t||!currentThread) return;
+  db.collection("messages").doc(currentThread).collection("messages")
+    .add({name:currentName,text:t,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  document.getElementById("msg-text").value="";
+};
+
+function startQR(){
+  document.getElementById("qr-reader").style.display="block";
+  new Html5Qrcode("qr-reader").start(
+    { facingMode: "environment" },
+    { fps:10, qrbox:250 },
+    qr=>{ document.getElementById("friend-id").value=qr; alert("読み取り完了！"); }
+  );
+}
+
+// ✅ 自動ログイン（localStorageがあれば）
+window.addEventListener("load", () => {
+  const saved = localStorage.getItem("chatUser");
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      currentName = data.username;
+      currentUID = data.uid;
+      document.getElementById("auth").style.display = "none";
+      document.getElementById("main").style.display = "flex";
+      document.getElementById("uname").innerText = currentName;
+      document.getElementById("uid").innerText = currentUID;
+      new QRCode(document.getElementById("my-qr"), {
+        text: currentUID, width: 128, height: 128
+      });
+      loadFriends();
+    } catch(e){
+      localStorage.removeItem("chatUser");
+    }
+  }
+});
+</script>
+</body>
+</html>
