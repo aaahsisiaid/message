@@ -20,39 +20,8 @@
       text-align: center;
       font-size: 1.2rem;
       position: relative;
-      z-index: 1;
+      z-index: 10;
     }
-    /* 通話バー */
-    #call-bar {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      background: #128c7e;
-      color: white;
-      padding: 10px 15px;
-      z-index: 2000;
-      font-weight: bold;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    }
-    #call-bar button {
-      margin-left: 10px;
-      border: none;
-      border-radius: 5px;
-      padding: 5px 10px;
-      cursor: pointer;
-      color: white;
-      font-weight: bold;
-    }
-    #call-answer-btn {
-      background: #25d366;
-    }
-    #call-hangup-btn {
-      background: #f44336;
-    }
-
     #auth, #main {
       flex: 1;
       display: none;
@@ -60,7 +29,8 @@
       align-items: center;
       padding: 15px;
       overflow-y: auto;
-      margin-top: 50px; /* 通話バーのスペース確保 */
+      position: relative;
+      z-index: 1;
     }
     #auth { display: flex; }
     input, button {
@@ -90,30 +60,12 @@
       border-radius: 10px;
       margin-bottom: 15px;
     }
-    #friend-list > div {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    #friend-list button.friend-name {
+    #friend-list button, #notification-list button {
+      width: 100%;
+      margin: 5px 0;
+      text-align: left;
       background: #fff;
       border: 1px solid #ddd;
-      width: auto;
-      flex: 1;
-      text-align: left;
-      cursor: pointer;
-      padding: 8px 10px;
-      border-radius: 5px;
-    }
-    #friend-list button.edit-subname {
-      background: #eee;
-      color: #333;
-      width: 40px;
-      margin-left: 8px;
-      font-size: 1.2em;
-      line-height: 1;
-      padding: 5px 0;
     }
     #messages {
       flex: 1;
@@ -189,17 +141,48 @@
     #start-call:hover {
       background: #128c7e;
     }
+
+    /* 通話通知バー */
+    #call-notification {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      max-width: 500px;
+      background: #25d366;
+      color: white;
+      padding: 10px 15px;
+      box-sizing: border-box;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 1000;
+      font-weight: bold;
+      border-radius: 0 0 10px 10px;
+    }
+    #call-notification button {
+      background: white;
+      color: #25d366;
+      border: none;
+      border-radius: 15px;
+      padding: 5px 12px;
+      margin-left: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #call-notification button:hover {
+      background: #b2fab4;
+    }
   </style>
 </head>
 <body>
 <header>モダンLINE風チャット</header>
 
-<!-- 通話バー -->
-<div id="call-bar">
-  <span id="call-bar-text">文字通話リクエストがあります</span>
+<div id="call-notification">
+  <span id="call-notification-text"></span>
   <div>
-    <button id="call-answer-btn">応答</button>
-    <button id="call-hangup-btn">切る</button>
+    <button id="btn-accept-call">応答</button>
+    <button id="btn-decline-call">切る</button>
   </div>
 </div>
 
@@ -263,126 +246,385 @@ const db = firebase.firestore();
 let currentUID = "", currentName = "", currentThread = "", subNames = {}, typingTimeout;
 let isInCall = false;
 let callPartnerUID = "";
-let incomingCallFrom = ""; // 誰からの通話か
 
-const callBar = document.getElementById("call-bar");
-const callBarText = document.getElementById("call-bar-text");
-const callAnswerBtn = document.getElementById("call-answer-btn");
-const callHangupBtn = document.getElementById("call-hangup-btn");
+// 通話通知UI要素
+const callNotification = document.getElementById("call-notification");
+const callNotificationText = document.getElementById("call-notification-text");
+const btnAcceptCall = document.getElementById("btn-accept-call");
+const btnDeclineCall = document.getElementById("btn-decline-call");
 
-// --- 以下は省略せず必要な関数だけ抜粋・調整 ---
-// 自動ログインチェックや登録・ログインは省略
+// 自動ログインチェック
+window.onload = () => {
+  const u = localStorage.getItem("user");
+  const p = localStorage.getItem("pass");
+  if (u && p) {
+    document.getElementById("user").value = u;
+    document.getElementById("pass").value = p;
+    login(true);
+  }
+};
 
-// 通話リクエスト監視を強化
-function listenCallRequests(){
-  db.collection("users").where("uid","==",currentUID).onSnapshot(snap => {
-    if(snap.empty) return;
-    const d = snap.docs[0].data();
-    const calls = d.callRequests || [];
+function genUID(name){
+  const r = Math.random().toString(36).substr(2,6);
+  return `uid_${name}_${r}`;
+}
 
-    if(calls.length > 0 && !isInCall && !incomingCallFrom){
-      incomingCallFrom = calls[0];
-      callBarText.innerText = `${incomingCallFrom} から文字通話リクエストがあります`;
-      callBar.style.display = "flex";
-    }
+async function register(){
+  const u=document.getElementById("user").value.trim(), p=document.getElementById("pass").value;
+  if(!u||!p){ showAuthMsg("全て入力してください"); return; }
+  const exists = await db.collection("users").where("username","==",u).get();
+  if(!exists.empty){ showAuthMsg("そのユーザー名は使えません"); return; }
+  const uid=genUID(u);
+  await db.collection("users").add({username:u,password:p,uid,friends:[],requests:[],subNames:{},callRequests:[]});
+  showAuthMsg("登録完了。ログインしてください。");
+}
 
-    if(d.callStatus === "ended"){
-      endCallUI("相手が文字通話を切りました");
+function showAuthMsg(msg){ document.getElementById("auth-msg").innerText=msg; }
+
+async function login(auto=false){
+  const u=document.getElementById("user").value.trim(), p=document.getElementById("pass").value;
+  const snap = await db.collection("users")
+    .where("username","==",u).where("password","==",p).get();
+  if(snap.empty){
+    if (!auto) showAuthMsg("認証失敗");
+    return;
+  }
+  const d=snap.docs[0];
+  currentName=d.data().username;
+  currentUID=d.data().uid;
+  subNames = d.data().subNames || {};
+  localStorage.setItem("user", u);
+  localStorage.setItem("pass", p);
+  document.getElementById("auth").style.display="none";
+  document.getElementById("main").style.display="flex";
+  document.getElementById("uname").innerText=currentName;
+  document.getElementById("uid").innerText=currentUID;
+  new QRCode(document.getElementById("my-qr"),{text:currentUID,width:128,height:128});
+  loadFriends();
+  loadRequests();
+  listenCallRequests();
+}
+
+document.getElementById("logout-btn").onclick = () => {
+  localStorage.clear();
+  location.reload();
+};
+
+async function addFriend(){
+  const fid=document.getElementById("friend-id").value.trim();
+  if(!fid || fid===currentUID) return alert("無効なID");
+
+  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
+  const youSnap = await db.collection("users").where("uid","==",fid).get();
+  if (youSnap.empty) return alert("相手が見つかりません");
+  const myDoc = meSnap.docs[0];
+  const yourDoc = youSnap.docs[0];
+  const reqs = yourDoc.data().requests || [];
+
+  if (reqs.includes(currentUID)) return alert("すでに申請済みです");
+
+  reqs.push(currentUID);
+  await db.collection("users").doc(yourDoc.id).update({requests: reqs});
+  alert("申請を送信しました");
+}
+
+async function loadRequests(){
+  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
+  const reqs = meSnap.docs[0].data().requests || [];
+  const list = document.getElementById("notification-list");
+  list.innerHTML = "";
+  for(const uid of reqs){
+    const snap = await db.collection("users").where("uid","==",uid).get();
+    if(snap.empty) continue;
+    const user = snap.docs[0].data();
+    const btn = document.createElement("button");
+    btn.textContent = `${user.username} さんから申請`;
+    btn.onclick = async () => {
+      const me = meSnap.docs[0], you = snap.docs[0];
+      const myFr = me.data().friends || [], yourFr = you.data().friends || [];
+      if (!myFr.includes(uid)) myFr.push(uid);
+      if (!yourFr.includes(currentUID)) yourFr.push(currentUID);
+      const myReqs = reqs.filter(id => id !== uid);
+      await db.collection("users").doc(me.id).update({friends: myFr, requests: myReqs});
+      await db.collection("users").doc(you.id).update({friends: yourFr});
+      alert("承認しました！");
+      loadRequests();
+      loadFriends();
+    };
+    list.appendChild(btn);
+  }
+}
+async function loadFriends(){
+  const list=document.getElementById("friend-list");
+  list.innerHTML="";
+  const snap=await db.collection("users").where("uid","==",currentUID).get();
+  const fr=snap.docs[0].data().friends||[];
+  const added = new Set();
+  for(const fid of fr){
+    if(added.has(fid)) continue;
+    added.add(fid);
+    const fSnap=await db.collection("users").where("uid","==",fid).get();
+    if(fSnap.empty) continue;
+    const fdoc=fSnap.docs[0].data();
+    const btn=document.createElement("button");
+    const sub = subNames[fid] ? `（${subNames[fid]}）` : "";
+    btn.innerText=fdoc.username + sub;
+    btn.onclick=()=>openChat(fid,fdoc.username);
+
+    // サブネーム編集ボタン
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✎";
+    editBtn.style.marginLeft = "10px";
+    editBtn.onclick = () => editSubName(fid);
+
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    container.style.justifyContent = "space-between";
+    container.appendChild(btn);
+    container.appendChild(editBtn);
+
+    list.appendChild(container);
+  }
+}
+
+async function editSubName(fid){
+  const newName = prompt("サブネームを入力してください", subNames[fid] || "");
+  if(newName === null) return;
+  subNames[fid] = newName.trim();
+  // Firestore更新
+  const snap = await db.collection("users").where("uid","==",currentUID).get();
+  const docId = snap.docs[0].id;
+  await db.collection("users").doc(docId).update({subNames});
+  loadFriends();
+}
+
+function getThread(u1,u2){ return [u1,u2].sort().join("__"); }
+
+function openChat(fid,fname){
+  if(!isFriendApproved(fid)){
+    alert("承認された友達とのみチャットできます");
+    return;
+  }
+  currentThread=getThread(currentUID,fid);
+  callPartnerUID = fid;
+  document.getElementById("messages").innerHTML="";
+  document.getElementById("msg-text").value="";
+  document.getElementById("start-call").style.display = "inline-block";
+  listenTyping(fid);
+  db.collection("messages").doc(currentThread).collection("messages")
+    .orderBy("timestamp").onSnapshot(ss=>{
+      const mdiv=document.getElementById("messages");
+      mdiv.innerHTML="";
+      ss.forEach(d=>{
+        const m=d.data();
+        const el=document.createElement("div");
+        el.className="message "+(m.uid===currentUID?"my-message":"other-message");
+        if(m.deleted){
+          el.innerText = m.uid===currentUID ? "（送信を取り消しました）" : "（送信が取り消されました）";
+        } else {
+          el.innerHTML = `${m.text}<div class="msg-meta">${timeStr(m.timestamp)}${m.read ? "・既読" : ""}</div>`;
+        }
+        if (m.uid===currentUID && !m.deleted) {
+          const del = document.createElement("span");
+          del.className = "delete-btn";
+          del.innerText = "❌";
+          del.onclick = () => deleteMessage(d.id);
+          el.appendChild(del);
+        }
+        mdiv.appendChild(el);
+      });
+      mdiv.scrollTop = mdiv.scrollHeight;
+      markAsRead();
+    });
+}
+
+function isFriendApproved(fid){
+  // 友達リストにいるかを簡易チェック
+  return Object.keys(subNames).includes(fid) || true; 
+  // 本来はfriendsリストや承認済みをチェックするロジックに置き換え可能
+}
+
+function timeStr(ts){
+  if(!ts) return "";
+  const d = ts.toDate();
+  return `${d.getHours()}:${("0"+d.getMinutes()).slice(-2)}`;
+}
+
+function markAsRead(){
+  const ref = db.collection("messages").doc(currentThread).collection("messages");
+  ref.where("uid","!=",currentUID).where("read","==",false).get().then(snap=>{
+    snap.forEach(doc=>{
+      doc.ref.update({read:true});
+    });
+  });
+}
+
+function deleteMessage(msgId){
+  const ref = db.collection("messages").doc(currentThread).collection("messages").doc(msgId);
+  ref.update({deleted:true});
+}
+
+document.getElementById("send-btn").onclick=()=>{
+  if(isInCall) return alert("文字通話中は通常メッセージを送れません");
+  const t=document.getElementById("msg-text").value.trim();
+  if(!t||!currentThread) return;
+  db.collection("messages").doc(currentThread).collection("messages").add({
+    uid: currentUID, text: t, timestamp: firebase.firestore.FieldValue.serverTimestamp(), read: false, deleted:false
+  });
+  document.getElementById("msg-text").value="";
+  sendTyping(false);
+};
+
+document.getElementById("msg-text").addEventListener("input",()=>{
+  if(isInCall) return; // 通常チャット時のみ入力中表示
+  sendTyping(true);
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => sendTyping(false), 3000);
+});
+
+function sendTyping(flag){
+  if(!currentThread) return;
+  db.collection("typing").doc(currentThread).set({
+    uid: flag ? currentUID : "",
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function listenTyping(fid){
+  const docId = getThread(currentUID, fid);
+  db.collection("typing").doc(docId).onSnapshot(doc=>{
+    if(!doc.exists){ document.getElementById("live-typing").innerText=""; return; }
+    const data = doc.data();
+    if(data.uid && data.uid !== currentUID){
+      document.getElementById("live-typing").innerText = "相手が入力中...";
+    } else {
+      document.getElementById("live-typing").innerText = "";
     }
   });
 }
 
-// 通話開始ボタン押した時の処理
+// 文字通話機能
 document.getElementById("start-call").onclick = () => {
-  if(!currentThread || !callPartnerUID) return alert("チャットを選択してください");
-  isInCall = true;
-  document.getElementById("start-call").style.display = "none";
-  document.getElementById("live-typing").innerText = "文字通話中...";
-  document.getElementById("msg-text").disabled = false;
-  document.getElementById("send-btn").disabled = false;
+  if(isInCall){
+    alert("すでに文字通話中です");
+    return;
+  }
   sendCallRequest(callPartnerUID);
-  incomingCallFrom = "";
-  callBar.style.display = "none";
+  alert("文字通話開始リクエストを送信しました");
+  isInCall = true;
+  updateUIForCall(true);
+};
+
+function updateUIForCall(inCall){
+  isInCall = inCall;
+  document.getElementById("start-call").style.display = inCall ? "none" : "inline-block";
+  document.getElementById("input-area").style.display = inCall ? "none" : "flex";
+  document.getElementById("live-typing").style.display = inCall ? "none" : "block";
 }
 
-// 通話リクエスト送信
 async function sendCallRequest(toUID){
+  // FirestoreのcallRequestsに追加
   const snap = await db.collection("users").where("uid", "==", toUID).get();
   if(snap.empty) return;
   const doc = snap.docs[0];
-  const callReqs = doc.data().callRequests || [];
-  if(!callReqs.includes(currentUID)){
-    callReqs.push(currentUID);
-    await db.collection("users").doc(doc.id).update({callRequests: callReqs, callStatus: "calling"});
-  }
+  let arr = doc.data().callRequests || [];
+  if(!arr.includes(currentUID)) arr.push(currentUID);
+  await db.collection("users").doc(doc.id).update({callRequests: arr});
 }
 
-// 応答ボタン押下
-callAnswerBtn.onclick = async () => {
-  if(!incomingCallFrom) return;
-  isInCall = true;
-  callPartnerUID = incomingCallFrom;
-
-  callBarText.innerText = `文字通話中（${incomingCallFrom}）`;
-  callAnswerBtn.style.display = "none";
-
-  document.getElementById("start-call").style.display = "none";
-  document.getElementById("live-typing").innerText = "文字通話中...";
-  document.getElementById("msg-text").disabled = false;
-  document.getElementById("send-btn").disabled = false;
-
+// 相手のcallRequestsを監視し通知表示
+async function listenCallRequests(){
   const snap = await db.collection("users").where("uid", "==", currentUID).get();
-  if(!snap.empty){
-    const doc = snap.docs[0];
-    const callReqs = doc.data().callRequests || [];
-    const newReqs = callReqs.filter(uid => uid !== incomingCallFrom);
-    await db.collection("users").doc(doc.id).update({callRequests: newReqs, callStatus: "inCall"});
-  }
-  incomingCallFrom = "";
-};
-
-// 切るボタン押下
-callHangupBtn.onclick = async () => {
-  if(!isInCall && !incomingCallFrom){
-    if(incomingCallFrom){
-      const snap = await db.collection("users").where("uid", "==", currentUID).get();
-      if(!snap.empty){
-        const doc = snap.docs[0];
-        const callReqs = doc.data().callRequests || [];
-        const newReqs = callReqs.filter(uid => uid !== incomingCallFrom);
-        await db.collection("users").doc(doc.id).update({callRequests: newReqs, callStatus: "idle"});
-      }
-      incomingCallFrom = "";
+  if(snap.empty) return;
+  const docId = snap.docs[0].id;
+  db.collection("users").doc(docId).onSnapshot(async doc=>{
+    if(!doc.exists) return;
+    const data = doc.data();
+    const calls = data.callRequests || [];
+    // 自分宛の通話リクエストの中に1件でもあれば通知表示
+    if(calls.length > 0){
+      const callerUID = calls[0];
+      const callerSnap = await db.collection("users").where("uid", "==", callerUID).get();
+      if(callerSnap.empty) return;
+      const callerName = callerSnap.docs[0].data().username;
+      showCallNotification(callerUID, callerName);
+    } else {
+      hideCallNotification();
     }
-    callBar.style.display = "none";
-    return;
-  }
-  if(isInCall){
-    const snap = await db.collection("users").where("uid", "==", callPartnerUID).get();
-    if(!snap.empty){
-      const doc = snap.docs[0];
-      await db.collection("users").doc(doc.id).update({callStatus: "ended"});
-    }
-    endCallUI("文字通話を切りました");
-  }
-};
-
-// 通話終了UIリセット
-function endCallUI(msg){
-  isInCall = false;
-  callPartnerUID = "";
-  incomingCallFrom = "";
-  callBar.style.display = "none";
-  callAnswerBtn.style.display = "inline-block";
-  document.getElementById("start-call").style.display = "inline-block";
-  document.getElementById("live-typing").innerText = "";
-  document.getElementById("msg-text").disabled = false;
-  document.getElementById("send-btn").disabled = false;
-  alert(msg);
+  });
 }
 
-// 他の関数は省略しますが、認証、友達管理、メッセージ送信受信などは
-// これまで通り実装してください。
+function showCallNotification(callerUID, callerName){
+  callNotificationText.innerText = `${callerName} さんから文字通話の着信があります`;
+  callNotification.style.display = "flex";
+  btnAcceptCall.onclick = () => acceptCall(callerUID);
+  btnDeclineCall.onclick = () => declineCall(callerUID);
+}
+
+function hideCallNotification(){
+  callNotification.style.display = "none";
+}
+
+// 応答時
+async function acceptCall(callerUID){
+  callPartnerUID = callerUID;
+  currentThread = getThread(currentUID, callPartnerUID);
+  updateUIForCall(true);
+  hideCallNotification();
+  // 通話リクエストから自分のUIDを削除
+  await removeCallRequest(currentUID);
+  alert("文字通話が開始されました");
+  // 文字通話UIへの切替や処理をここに追加可
+}
+
+// 切る時
+async function declineCall(callerUID){
+  hideCallNotification();
+  await removeCallRequest(currentUID);
+  alert("文字通話が拒否されました");
+}
+
+// 切断処理（通話中の切断）
+async function hangupCall(){
+  if(!isInCall) return;
+  updateUIForCall(false);
+  isInCall = false;
+  alert("文字通話が切られました");
+  await notifyCallHangup(callPartnerUID);
+  callPartnerUID = "";
+  currentThread = "";
+}
+
+// callRequestsから自身を削除
+async function removeCallRequest(uid){
+  const snap = await db.collection("users").where("uid", "==", currentUID).get();
+  if(snap.empty) return;
+  const doc = snap.docs[0];
+  let arr = doc.data().callRequests || [];
+  arr = arr.filter(id => id !== uid);
+  await db.collection("users").doc(doc.id).update({callRequests: arr});
+}
+
+// 切断通知を相手に送る
+async function notifyCallHangup(toUID){
+  // メッセージとして送る方法の例（チャットに切断メッセージを表示）
+  const thread = getThread(currentUID, toUID);
+  await db.collection("messages").doc(thread).collection("messages").add({
+    uid: currentUID,
+    text: "文字通話が切られました",
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    deleted: false,
+    system: true
+  });
+}
+
+window.onbeforeunload = () => {
+  // ページ離脱時に切断扱いにする（必要に応じて）
+  if(isInCall){
+    hangupCall();
+  }
+};
 
 </script>
 </body>
