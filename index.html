@@ -137,6 +137,23 @@
     #start-call:hover {
       background: #128c7e;
     }
+    /* 友達リストの名前＋編集ボタン横並び用 */
+    #friend-list > div {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+    }
+    #friend-list > div > span {
+      cursor: pointer;
+      flex-grow: 1;
+    }
+    #friend-list > div > button {
+      width: 40px;
+      margin-left: 10px;
+      padding: 5px;
+      font-size: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -304,6 +321,7 @@ async function loadRequests(){
     list.appendChild(btn);
   }
 }
+
 async function loadFriends(){
   const list=document.getElementById("friend-list");
   list.innerHTML="";
@@ -316,15 +334,30 @@ async function loadFriends(){
     const fSnap=await db.collection("users").where("uid","==",fid).get();
     if(fSnap.empty) continue;
     const fdoc=fSnap.docs[0].data();
-    const btn=document.createElement("button");
+
+    // 友達名表示用のspanを作成
+    const nameSpan = document.createElement("span");
     const sub = subNames[fid] ? `（${subNames[fid]}）` : "";
-    btn.innerText=fdoc.username + sub;
-    btn.onclick=()=>openChat(fid,fdoc.username);
-    list.append(btn);
+    nameSpan.textContent = fdoc.username + sub;
+    nameSpan.style.cursor = "pointer";
+
+    // クリックでチャットを開く処理を付ける
+    nameSpan.onclick = () => openChat(fid, fdoc.username);
+
+    // サブネーム編集ボタン
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✎";
+    editBtn.onclick = () => editSubName(fid);
+
+    // containerにnameSpanとeditBtnを並べる
+    const container = document.createElement("div");
+    container.appendChild(nameSpan);
+    container.appendChild(editBtn);
+
+    list.appendChild(container);
   }
 }
 
-// サブネーム変更ボタンを表示する関数
 async function editSubName(fid){
   const newName = prompt("サブネームを入力してください", subNames[fid] || "");
   if(newName === null) return;
@@ -379,7 +412,6 @@ function openChat(fid,fname){
 function isFriendApproved(fid){
   // 友達リストにいるかを簡易チェック
   return Object.keys(subNames).includes(fid) || true; 
-  // 本来はfriendsリストや承認済みをチェックするロジックに置き換え可能
 }
 
 function timeStr(ts){
@@ -440,180 +472,65 @@ function listenTyping(fid){
   });
 }
 
-function startQR(){
-  document.getElementById("qr-reader").style.display="block";
-  new Html5Qrcode("qr-reader").start(
-    { facingMode: "environment" },
-    { fps:10, qrbox:250 },
-    qr=>{
-      document.getElementById("friend-id").value=qr;
-      alert("読み取り完了！");
-      document.getElementById("qr-reader").style.display="none";
-    }
-  );
-}
-
-// 文字通話機能の開始・終了
+// 文字通話機能
 document.getElementById("start-call").onclick = () => {
-  if(!currentThread || !callPartnerUID) return;
-  if(!isInCall){
-    startCall();
-  } else {
-    endCall();
-  }
-};
-
-async function startCall(){
+  if(!currentThread || !callPartnerUID) return alert("チャットを選択してください");
   isInCall = true;
-  document.getElementById("start-call").innerText = "文字通話を終了";
-  document.getElementById("msg-text").disabled = true;
-  document.getElementById("send-btn").disabled = true;
+  document.getElementById("start-call").style.display = "none";
   document.getElementById("live-typing").innerText = "文字通話中...";
-
-  // 通話開始通知を相手に送る
-  const snap = await db.collection("users").where("uid","==",callPartnerUID).get();
-  if(snap.empty) return;
-  const youDoc = snap.docs[0];
-  const callReqs = youDoc.data().callRequests || [];
-  if(!callReqs.includes(currentUID)){
-    callReqs.push(currentUID);
-    await db.collection("users").doc(youDoc.id).update({callRequests: callReqs});
-  }
-
-  // 文字通話用のリアルタイム受信監視開始
-  listenCallMessages();
-}
-
-async function endCall(){
-  isInCall = false;
-  document.getElementById("start-call").innerText = "文字通話を開始";
   document.getElementById("msg-text").disabled = false;
   document.getElementById("send-btn").disabled = false;
-  document.getElementById("live-typing").innerText = "";
+  sendCallRequest(callPartnerUID);
+};
 
-  // 文字通話用のリアルタイム受信監視停止
-  if(callListenerUnsub) callListenerUnsub();
-  callListenerUnsub = null;
-
-  // 通話終了通知を相手に送る（削除）
-  const snap = await db.collection("users").where("uid","==",callPartnerUID).get();
-  if(snap.empty) return;
-  const youDoc = snap.docs[0];
-  let callReqs = youDoc.data().callRequests || [];
-  callReqs = callReqs.filter(uid => uid !== currentUID);
-  await db.collection("users").doc(youDoc.id).update({callRequests: callReqs});
-}
-
-let callListenerUnsub = null;
-function listenCallMessages(){
-  if(callListenerUnsub) callListenerUnsub();
-  callListenerUnsub = db.collection("callMessages").doc(currentThread)
-    .collection("messages")
-    .orderBy("timestamp")
-    .onSnapshot(ss=>{
-      const mdiv = document.getElementById("messages");
-      mdiv.innerHTML = "";
-      ss.forEach(d=>{
-        const m = d.data();
-        const el = document.createElement("div");
-        el.className = m.uid===currentUID ? "my-message" : "other-message";
-        el.textContent = m.text;
-        mdiv.appendChild(el);
-      });
-      mdiv.scrollTop = mdiv.scrollHeight;
-    });
-}
-
-document.getElementById("msg-text").addEventListener("input", e => {
-  if(!isInCall) return;
-  const txt = e.target.value;
-  // 文字通話メッセージ送信（リアルタイム更新用）
-  const coll = db.collection("callMessages").doc(currentThread).collection("messages");
-  coll.add({
-    uid: currentUID,
-    text: txt,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-});
-// 通話開始通知の監視
-async function listenCallRequests(){
-  const snap = await db.collection("users").where("uid","==",currentUID).get();
+async function sendCallRequest(toUID){
+  const snap = await db.collection("users").where("uid", "==", toUID).get();
   if(snap.empty) return;
   const doc = snap.docs[0];
-  db.collection("users").doc(doc.id).onSnapshot(docSnap=>{
-    const data = docSnap.data();
-    const calls = data.callRequests || [];
+  const callReqs = doc.data().callRequests || [];
+  if(!callReqs.includes(currentUID)){
+    callReqs.push(currentUID);
+    await db.collection("users").doc(doc.id).update({callRequests: callReqs});
+  }
+}
+
+function listenCallRequests(){
+  db.collection("users").where("uid","==",currentUID).onSnapshot(snap => {
+    if(snap.empty) return;
+    const d = snap.docs[0].data();
+    const calls = d.callRequests || [];
     if(calls.length > 0){
-      alert("相手が文字通話を開始しました。チャット画面で「文字通話を開始」ボタンを押してください。");
-      // 必要ならUIに通知表示やボタン表示をここで行う
+      alert("文字通話リクエストがあります");
+      // ここでUI上で通知を出すなど拡張可能
     }
   });
 }
 
-listenCallRequests();
-
-// 通知ボックスの初期ロードと監視
-async function loadRequests(){
-  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
-  const reqs = meSnap.docs[0].data().requests || [];
-  const list = document.getElementById("notification-list");
-  list.innerHTML = "";
-  for(const uid of reqs){
-    const snap = await db.collection("users").where("uid","==",uid).get();
-    if(snap.empty) continue;
-    const user = snap.docs[0].data();
-    const btn = document.createElement("button");
-    btn.textContent = `${user.username} さんから申請`;
-    btn.onclick = async () => {
-      const me = meSnap.docs[0], you = snap.docs[0];
-      const myFr = me.data().friends || [], yourFr = you.data().friends || [];
-      if (!myFr.includes(uid)) myFr.push(uid);
-      if (!yourFr.includes(currentUID)) yourFr.push(currentUID);
-      const myReqs = reqs.filter(id => id !== uid);
-      await db.collection("users").doc(me.id).update({friends: myFr, requests: myReqs});
-      await db.collection("users").doc(you.id).update({friends: yourFr});
-      alert("承認しました！");
-      loadRequests();
-      loadFriends();
-    };
-    list.appendChild(btn);
+// QRコード読み取り
+let html5QrcodeScanner;
+function startQR(){
+  const qrDiv = document.getElementById("qr-reader");
+  qrDiv.style.display = "block";
+  if(!html5QrcodeScanner){
+    html5QrcodeScanner = new Html5Qrcode("qr-reader");
   }
+  html5QrcodeScanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    qrCodeMessage => {
+      document.getElementById("friend-id").value = qrCodeMessage;
+      html5QrcodeScanner.stop();
+      qrDiv.style.display = "none";
+      alert("IDをセットしました");
+    },
+    errorMessage => {
+      // 無視してOK
+    }
+  ).catch(err => {
+    alert("QRコード読み取り開始に失敗しました");
+  });
 }
+</script>
 
-loadRequests();
-
-// 友達リストにサブネーム編集ボタン追加
-async function loadFriends(){
-  const list=document.getElementById("friend-list");
-  list.innerHTML="";
-  const snap=await db.collection("users").where("uid","==",currentUID).get();
-  const fr=snap.docs[0].data().friends||[];
-  const added = new Set();
-  for(const fid of fr){
-    if(added.has(fid)) continue;
-    added.add(fid);
-    const fSnap=await db.collection("users").where("uid","==",fid).get();
-    if(fSnap.empty) continue;
-    const fdoc=fSnap.docs[0].data();
-    const btn=document.createElement("button");
-    const sub = subNames[fid] ? `（${subNames[fid]}）` : "";
-    btn.innerText=fdoc.username + sub;
-    btn.onclick=()=>openChat(fid,fdoc.username);
-
-    // サブネーム編集ボタン
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "✎";
-    editBtn.style.marginLeft = "10px";
-    editBtn.onclick = () => editSubName(fid);
-
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.justifyContent = "space-between";
-    container.appendChild(btn);
-    container.appendChild(editBtn);
-
-    list.appendChild(container);
-  }
-}
-
-loadFriends();
+</body>
+</html>
