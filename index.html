@@ -19,7 +19,40 @@
       padding: 15px;
       text-align: center;
       font-size: 1.2rem;
+      position: relative;
+      z-index: 1;
     }
+    /* 通話バー */
+    #call-bar {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #128c7e;
+      color: white;
+      padding: 10px 15px;
+      z-index: 2000;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    #call-bar button {
+      margin-left: 10px;
+      border: none;
+      border-radius: 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+      color: white;
+      font-weight: bold;
+    }
+    #call-answer-btn {
+      background: #25d366;
+    }
+    #call-hangup-btn {
+      background: #f44336;
+    }
+
     #auth, #main {
       flex: 1;
       display: none;
@@ -27,6 +60,7 @@
       align-items: center;
       padding: 15px;
       overflow-y: auto;
+      margin-top: 50px; /* 通話バーのスペース確保 */
     }
     #auth { display: flex; }
     input, button {
@@ -56,12 +90,30 @@
       border-radius: 10px;
       margin-bottom: 15px;
     }
-    #friend-list button, #notification-list button {
-      width: 100%;
-      margin: 5px 0;
-      text-align: left;
+    #friend-list > div {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    #friend-list button.friend-name {
       background: #fff;
       border: 1px solid #ddd;
+      width: auto;
+      flex: 1;
+      text-align: left;
+      cursor: pointer;
+      padding: 8px 10px;
+      border-radius: 5px;
+    }
+    #friend-list button.edit-subname {
+      background: #eee;
+      color: #333;
+      width: 40px;
+      margin-left: 8px;
+      font-size: 1.2em;
+      line-height: 1;
+      padding: 5px 0;
     }
     #messages {
       flex: 1;
@@ -137,39 +189,6 @@
     #start-call:hover {
       background: #128c7e;
     }
-
-    /* 追加：画面上部固定の通話バー */
-    #call-bar {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%;
-      background: #128c7e;
-      color: white;
-      padding: 10px;
-      z-index: 1000;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: bold;
-      box-sizing: border-box;
-    }
-    #call-bar button {
-      margin-left: 10px;
-      padding: 5px 10px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    #call-answer-btn {
-      background: #25d366;
-      color: #fff;
-    }
-    #call-hangup-btn {
-      background: #f44336;
-      color: #fff;
-    }
   </style>
 </head>
 <body>
@@ -244,39 +263,36 @@ const db = firebase.firestore();
 let currentUID = "", currentName = "", currentThread = "", subNames = {}, typingTimeout;
 let isInCall = false;
 let callPartnerUID = "";
-let incomingCallFrom = "";  // 誰からの通話リクエストか
-
-// ... (既存のregister, login, friend追加やチャット機能は省略) ...
+let incomingCallFrom = ""; // 誰からの通話か
 
 const callBar = document.getElementById("call-bar");
 const callBarText = document.getElementById("call-bar-text");
 const callAnswerBtn = document.getElementById("call-answer-btn");
 const callHangupBtn = document.getElementById("call-hangup-btn");
 
-// 通話リクエスト監視
+// --- 以下は省略せず必要な関数だけ抜粋・調整 ---
+// 自動ログインチェックや登録・ログインは省略
+
+// 通話リクエスト監視を強化
 function listenCallRequests(){
   db.collection("users").where("uid","==",currentUID).onSnapshot(snap => {
     if(snap.empty) return;
     const d = snap.docs[0].data();
     const calls = d.callRequests || [];
-    const callStatus = d.callStatus || "idle";
 
-    // 新しい着信があるとき
     if(calls.length > 0 && !isInCall && !incomingCallFrom){
       incomingCallFrom = calls[0];
       callBarText.innerText = `${incomingCallFrom} から文字通話リクエストがあります`;
       callBar.style.display = "flex";
-      callAnswerBtn.style.display = "inline-block";
     }
 
-    // 相手から通話終了通知を受けた場合
-    if(callStatus === "ended" && isInCall){
+    if(d.callStatus === "ended"){
       endCallUI("相手が文字通話を切りました");
     }
   });
 }
 
-// 通話開始ボタン押下（自分から）
+// 通話開始ボタン押した時の処理
 document.getElementById("start-call").onclick = () => {
   if(!currentThread || !callPartnerUID) return alert("チャットを選択してください");
   isInCall = true;
@@ -287,7 +303,7 @@ document.getElementById("start-call").onclick = () => {
   sendCallRequest(callPartnerUID);
   incomingCallFrom = "";
   callBar.style.display = "none";
-};
+}
 
 // 通話リクエスト送信
 async function sendCallRequest(toUID){
@@ -315,7 +331,6 @@ callAnswerBtn.onclick = async () => {
   document.getElementById("msg-text").disabled = false;
   document.getElementById("send-btn").disabled = false;
 
-  // 自分のcallRequestsからリクエスト送信者を除去し、状態更新
   const snap = await db.collection("users").where("uid", "==", currentUID).get();
   if(!snap.empty){
     const doc = snap.docs[0];
@@ -329,7 +344,6 @@ callAnswerBtn.onclick = async () => {
 // 切るボタン押下
 callHangupBtn.onclick = async () => {
   if(!isInCall && !incomingCallFrom){
-    // 通話リクエスト拒否またはキャンセル
     if(incomingCallFrom){
       const snap = await db.collection("users").where("uid", "==", currentUID).get();
       if(!snap.empty){
@@ -343,9 +357,7 @@ callHangupBtn.onclick = async () => {
     callBar.style.display = "none";
     return;
   }
-  // 通話中の切断
   if(isInCall){
-    // 相手に通話終了通知を送信
     const snap = await db.collection("users").where("uid", "==", callPartnerUID).get();
     if(!snap.empty){
       const doc = snap.docs[0];
@@ -369,11 +381,8 @@ function endCallUI(msg){
   alert(msg);
 }
 
-// ページ読み込み時などに呼ぶ例
-function init(){
-  // ユーザー認証完了後に呼ぶ
-  listenCallRequests();
-}
+// 他の関数は省略しますが、認証、友達管理、メッセージ送信受信などは
+// これまで通り実装してください。
 
 </script>
 </body>
