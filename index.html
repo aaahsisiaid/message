@@ -1,717 +1,636 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<title>モダンLINE風チャット</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FlashCam</title>
 <style>
-  body {
-    margin: 0;
-    font-family: "Helvetica Neue", Arial, sans-serif;
-    background: #e5ddd5;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-  }
-  header {
-    background: #075e54;
-    color: #fff;
-    padding: 15px;
-    text-align: center;
-    font-size: 1.2rem;
-    position: relative;
-    z-index: 10;
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --panel: #0f0f18;
+    --border: #1e1e2e;
+    --accent: #7fffb2;
+    --accent2: #ff7f50;
+    --accent3: #7fb8ff;
+    --text: #c8c8d8;
+    --dim: #555566;
+    --font: 'Space Mono', monospace;
   }
 
-  /* 通話通知バー */
-  #call-notification {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    max-width: 500px;
-    background: #25d366;
-    color: white;
-    padding: 10px 15px;
-    box-sizing: border-box;
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .titlebar {
+    height: 28px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 6px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .traffic { width: 11px; height: 11px; border-radius: 50%; cursor: pointer; transition: opacity .2s; }
+  .traffic:hover { opacity: .7; }
+  .t-red { background: #ff5f56; }
+  .t-yel { background: #ffbd2e; }
+  .t-grn { background: #27c93f; }
+  .titlebar-title {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    color: var(--dim); font-size: 11px; letter-spacing: .08em;
+  }
+
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    overflow: hidden;
+  }
+
+  .cam-area {
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
     display: none;
+  }
+  .cam-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .cam-overlay::before, .cam-overlay::after {
+    content: '';
+    position: absolute;
+    width: 40px; height: 40px;
+    border-color: var(--accent);
+    border-style: solid;
+    opacity: .5;
+  }
+  .cam-overlay::before { top: 16px; left: 16px; border-width: 2px 0 0 2px; }
+  .cam-overlay::after  { bottom: 16px; right: 16px; border-width: 0 2px 2px 0; }
+
+  .cam-placeholder {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 12px;
+    color: var(--dim);
+  }
+  .cam-placeholder svg { opacity: .25; }
+  .cam-placeholder span { font-size: 11px; letter-spacing: .1em; }
+
+  .flash-indicator {
+    position: absolute; inset: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .05s;
+  }
+  .flash-indicator.on { opacity: .14; }
+
+  .cam-status {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,10,15,.85);
+    border: 1px solid var(--border);
+    padding: 3px 12px;
+    font-size: 10px;
+    letter-spacing: .08em;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .cam-status.live { color: var(--accent); border-color: var(--accent); }
+  .cam-status.live::before {
+    content: 'REC ';
+    animation: blink-dot .8s step-end infinite;
+  }
+  @keyframes blink-dot { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .shutter-flash {
+    position: absolute; inset: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .shutter-flash.snap { animation: shutter .25s ease-out forwards; }
+  @keyframes shutter { 0%{opacity:.85} 100%{opacity:0} }
+
+  .flash-ring {
+    position: absolute;
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .flash-ring.pulse { animation: ring-pulse .35s ease-out forwards; }
+  @keyframes ring-pulse {
+    0%  { opacity: .9; transform: scale(.7); }
+    100%{ opacity: 0;  transform: scale(2.2); }
+  }
+
+  canvas { display: none; }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .section {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+  .section-title {
+    font-size: 9px;
+    letter-spacing: .15em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .control-row {
+    display: flex;
     align-items: center;
     justify-content: space-between;
-    z-index: 1000;
-    font-weight: bold;
-    border-radius: 0 0 10px 10px;
+    margin-bottom: 10px;
   }
-  #call-notification button {
-    background: white;
-    color: #25d366;
-    border: none;
-    border-radius: 15px;
-    padding: 5px 12px;
-    margin-left: 10px;
+  .control-label { font-size: 11px; color: var(--text); letter-spacing: .03em; }
+  .control-label small { display: block; color: var(--dim); font-size: 9px; margin-top: 2px; }
+
+  .num-input-wrap {
+    display: flex; align-items: center;
+    border: 1px solid var(--border);
+  }
+  .num-btn {
+    background: none; border: none;
+    color: var(--accent);
+    width: 24px; height: 28px;
     cursor: pointer;
-    font-weight: bold;
+    font-family: var(--font); font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
   }
-  #call-notification button:hover {
-    background: #b2fab4;
+  .num-btn:hover { background: rgba(127,255,178,.1); }
+  .num-display {
+    background: rgba(0,0,0,.5);
+    color: var(--accent);
+    font-size: 11px;
+    width: 46px; text-align: center;
+    padding: 4px 2px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    font-family: var(--font);
   }
+  .num-unit { font-size: 9px; color: var(--dim); margin-left: 4px; }
 
-  #auth, #main, #call-ui {
-    flex: 1;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    padding: 15px;
+  .btn {
+    width: 100%;
+    padding: 9px 0;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text);
+    font-family: var(--font); font-size: 11px;
+    letter-spacing: .1em; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    text-transform: uppercase;
+  }
+  .btn:hover { background: rgba(255,255,255,.04); border-color: #2a2a3a; }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .btn.primary:hover { background: rgba(127,255,178,.08); }
+  .btn.primary.active { background: var(--accent); color: #0a0a0f; }
+  .btn + .btn { margin-top: 6px; }
+
+  .log {
+    min-height: 60px; max-height: 160px;
     overflow-y: auto;
-    position: relative;
-    z-index: 1;
-  }
-  #auth { display: flex; }
-
-  input, button {
-    font-size: 1rem;
     padding: 8px;
-    margin: 4px 0;
-    width: 100%;
-    max-width: 300px;
-    box-sizing: border-box;
-    border-radius: 5px;
-    border: 1px solid #ccc;
+    background: rgba(0,0,0,.4);
+    border: 1px solid var(--border);
+    font-size: 9px; line-height: 1.75;
+    color: var(--dim);
+    display: flex; flex-direction: column-reverse;
   }
-  button.primary {
-    background: #128c7e;
-    color: white;
-    border: none;
-    cursor: pointer;
-  }
-  button.primary:hover {
-    background: #0e755f;
-  }
-  #info, #friend-section, #chat, #notification-box {
-    width: 100%;
-    max-width: 500px;
-    background: #fff;
-    padding: 15px;
-    border-radius: 10px;
-    margin-bottom: 15px;
-  }
-  #friend-list button, #notification-list button {
-    width: 100%;
-    margin: 5px 0;
-    text-align: left;
-    background: #fff;
-    border: 1px solid #ddd;
-  }
-  #messages {
-    flex: 1;
-    background: #fff;
-    padding: 10px;
-    border-radius: 10px;
-    overflow-y: auto;
-    margin-bottom: 10px;
-    height: 300px;
-    width: 100%;
-  }
-  .message {
-    max-width: 70%;
-    margin: 5px;
-    padding: 10px;
-    border-radius: 10px;
-    word-break: break-word;
-    position: relative;
-  }
-  .my-message {
-    align-self: flex-end;
-    background: #dcf8c6;
-    border-bottom-right-radius: 0;
-  }
-  .other-message {
-    align-self: flex-start;
-    background: #fff;
-    border-bottom-left-radius: 0;
-  }
-  .msg-meta {
-    font-size: 0.7em;
-    color: gray;
-    margin-top: 4px;
-  }
-  #input-area {
-    display: flex;
-    margin-top: 10px;
-    width: 100%;
-    max-width: 500px;
-  }
-  #input-area input {
-    flex: 1;
-    margin-right: 5px;
-    border-radius: 20px;
-    border: 1px solid #ccc;
-    padding: 10px;
-  }
-  #input-area button {
-    width: 80px;
-    border-radius: 20px;
-  }
-  #live-typing {
-    font-size: 0.9em;
-    color: #555;
-    margin-bottom: 5px;
-    text-align: center;
-  }
-  .delete-btn {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    font-size: 0.8em;
-    cursor: pointer;
-    color: red;
-  }
-  #start-call {
-    margin-top: 10px;
-    background: #25d366;
-    border: none;
-    color: white;
-    border-radius: 20px;
-    padding: 10px 15px;
-    cursor: pointer;
-    font-weight: bold;
-  }
-  #start-call:hover {
-    background: #128c7e;
-  }
+  .log::-webkit-scrollbar { width: 2px; }
+  .log-entry { white-space: pre-wrap; word-break: break-all; }
+  .log-entry.ok   { color: var(--accent); }
+  .log-entry.err  { color: var(--accent2); }
+  .log-entry.info { color: var(--accent3); }
 
-  /* 文字通話UI */
-  #call-ui {
-    display: none;
-    flex-direction: column;
-    width: 100%;
-    max-width: 500px;
-    background: #fff;
-    border-radius: 10px;
-    padding: 15px;
+  .stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  #call-messages {
-    flex: 1;
-    height: 350px;
-    overflow-y: auto;
-    border: 1px solid #ccc;
-    border-radius: 10px;
-    padding: 10px;
-    margin-bottom: 10px;
-    background: #f6f6f6;
-  }
-  #call-messages .message {
-    max-width: 80%;
-    margin: 5px;
-    padding: 8px 12px;
-    border-radius: 15px;
-    word-break: break-word;
-  }
-  #call-messages .my-message {
-    background: #dcf8c6;
-    align-self: flex-end;
-    border-bottom-right-radius: 0;
-  }
-  #call-messages .other-message {
-    background: #fff;
-    align-self: flex-start;
-    border-bottom-left-radius: 0;
-  }
-  #call-input-area {
-    display: flex;
-    margin-bottom: 10px;
-  }
-  #call-input-area input {
-    flex: 1;
-    padding: 10px;
-    border-radius: 20px;
-    border: 1px solid #ccc;
-    margin-right: 5px;
-  }
-  #call-input-area button {
-    padding: 10px 15px;
-    border-radius: 20px;
-    background: #25d366;
-    border: none;
-    color: white;
-    cursor: pointer;
-    font-weight: bold;
-  }
-  #call-input-area button:hover {
-    background: #128c7e;
-  }
-  #hangup-call {
-    width: 100%;
-    padding: 12px;
-    background: #e53935;
-    color: white;
-    font-weight: bold;
-    border: none;
-    border-radius: 20px;
-    cursor: pointer;
-  }
-  #hangup-call:hover {
-    background: #b71c1c;
+  .stat { text-align: center; }
+  .stat-val { font-size: 18px; color: var(--accent); display: block; font-weight: 700; }
+  .stat-lbl { font-size: 8px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+
+  @media (max-width: 600px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: 55vw 1fr; }
+    .sidebar { overflow-y: auto; }
   }
 </style>
 </head>
 <body>
-<header>モダンLINE風チャット</header>
 
-<div id="call-notification">
-  <span id="call-notification-text"></span>
-  <div>
-    <button id="btn-accept-call">応答</button>
-    <button id="btn-decline-call">切る</button>
-  </div>
+<div class="titlebar">
+  <div class="traffic t-red"></div>
+  <div class="traffic t-yel"></div>
+  <div class="traffic t-grn"></div>
+  <span class="titlebar-title">FlashCam.html</span>
 </div>
 
-<div id="auth">
-  <input id="user" placeholder="ユーザー名" autocomplete="off" />
-  <input id="pass" type="password" placeholder="パスワード" autocomplete="off" />
-  <button class="primary" onclick="register()">新規登録</button>
-  <button class="primary" onclick="login()">ログイン</button>
-  <p id="auth-msg" style="color:red;"></p>
-</div>
+<div class="main">
 
-<div id="main">
-  <div id="info">
-    <span>ようこそ、<strong id="uname"></strong> さん<br />あなたのID：<strong id="uid"></strong></span>
-    <button id="logout-btn" class="primary">ログアウト</button>
-    <div id="my-qr"></div>
-  </div>
+  <div class="cam-area" id="camArea">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
 
-  <div id="notification-box">
-    <h4>通知</h4>
-    <div id="notification-list"></div>
-  </div>
-
-  <div id="friend-section">
-    <input id="friend-id" placeholder="相手のUID" autocomplete="off" />
-    <button class="primary" onclick="addFriend()">友達追加</button>
-    <button class="primary" onclick="startQR()">QR読み取り</button>
-    <div id="qr-reader" style="display:none;"></div>
-    <h4>友達リスト</h4>
-    <div id="friend-list"></div>
-  </div>
-
-  <div id="chat">
-    <button id="start-call" style="display:none;">文字通話を開始</button>
-    <div id="live-typing"></div>
-    <div id="messages"></div>
-    <div id="input-area">
-      <input id="msg-text" placeholder="メッセージ" autocomplete="off" />
-      <button id="send-btn" class="primary">送信</button>
+    <div class="cam-placeholder" id="placeholder">
+      <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+        <rect x="8" y="18" width="56" height="40" rx="4" stroke="currentColor" stroke-width="2"/>
+        <circle cx="36" cy="38" r="12" stroke="currentColor" stroke-width="2"/>
+        <circle cx="36" cy="38" r="5" fill="currentColor" opacity=".35"/>
+        <path d="M24 18l4-8h16l4 8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="56" cy="26" r="3" fill="currentColor" opacity=".4"/>
+      </svg>
+      <span>START CAMERA</span>
     </div>
+
+    <div class="cam-overlay" id="camOverlay"></div>
+    <div class="flash-indicator" id="flashIndicator"></div>
+    <div class="shutter-flash" id="shutterFlash"></div>
+    <div class="flash-ring" id="flashRing"></div>
+    <div class="cam-status" id="camStatus">OFFLINE</div>
+  </div>
+
+  <div class="sidebar">
+
+    <div class="section">
+      <div class="section-title">Camera</div>
+      <button class="btn primary" id="btnCamera" onclick="toggleCamera()">▶ START CAMERA</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Flashlight</div>
+
+      <div class="control-row">
+        <div class="control-label">
+          点滅間隔
+          <small>blink interval</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adj('flashInterval',-0.5)">-</button>
+            <div class="num-display" id="flashInterval-display">2.0</div>
+            <button class="num-btn" onclick="adj('flashInterval',0.5)">+</button>
+          </div>
+          <span class="num-unit">sec</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          点灯時間
+          <small>on duration</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adj('flashDuration',-0.1)">-</button>
+            <div class="num-display" id="flashDuration-display">0.2</div>
+            <button class="num-btn" onclick="adj('flashDuration',0.1)">+</button>
+          </div>
+          <span class="num-unit">sec</span>
+        </div>
+      </div>
+
+      <button class="btn primary" id="btnFlash" onclick="toggleFlash()">&#9889; START FLASH</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Auto Capture</div>
+
+      <div class="control-row">
+        <div class="control-label">
+          撮影間隔
+          <small>capture interval</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adj('photoInterval',-1)">-</button>
+            <div class="num-display" id="photoInterval-display"> 5</div>
+            <button class="num-btn" onclick="adj('photoInterval',1)">+</button>
+          </div>
+          <span class="num-unit">sec</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          最大枚数
+          <small>max shots  0=unlimited</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="num-input-wrap">
+            <button class="num-btn" onclick="adj('maxShots',-1)">-</button>
+            <div class="num-display" id="maxShots-display"> 0</div>
+            <button class="num-btn" onclick="adj('maxShots',1)">+</button>
+          </div>
+          <span class="num-unit">pcs</span>
+        </div>
+      </div>
+
+      <button class="btn primary" id="btnPhoto" onclick="togglePhoto()">&#9711; START CAPTURE</button>
+      <button class="btn" onclick="snapNow()" style="margin-top:6px">SNAP NOW</button>
+    </div>
+
+    <div class="section" style="flex:1;display:flex;flex-direction:column;gap:8px">
+      <div class="section-title">Log</div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-val" id="statFlash">0</span>
+        <span class="stat-lbl">Flashes</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="statPhoto">0</span>
+        <span class="stat-lbl">Photos</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="statTime">--</span>
+        <span class="stat-lbl">Uptime</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
-<!-- 文字通話専用UI -->
-<div id="call-ui">
-  <div id="call-messages"></div>
-  <div id="call-input-area">
-    <input id="call-msg-text" placeholder="メッセージ入力..." autocomplete="off" />
-    <button id="call-send-btn">送信</button>
-  </div>
-  <button id="hangup-call">通話を切る</button>
-</div>
-
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAEdcU79-YWhTVyuaRIKL8Y7uZ3Yujw0Fs",
-  authDomain: "message-95d75.firebaseapp.com",
-  projectId: "message-95d75",
-  storageBucket: "message-95d75.appspot.com",
-  messagingSenderId: "348991178331",
-  appId: "1:348991178331:web:a504a5885f5df5491ba17e",
-  measurementId: "G-LGM9GQK2HK"
+const S = {
+  flashInterval: 2.0,
+  flashDuration: 0.2,
+  photoInterval: 5,
+  maxShots: 0,
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-
-let currentUID = "", currentName = "", currentThread = "", subNames = {}, typingTimeout;
-let isInCall = false;
-let callPartnerUID = "";
-
-// 通話通知UI要素
-const callNotification = document.getElementById("call-notification");
-const callNotificationText = document.getElementById("call-notification-text");
-const btnAcceptCall = document.getElementById("btn-accept-call");
-const btnDeclineCall = document.getElementById("btn-decline-call");
-
-window.onload = () => {
-  const u = localStorage.getItem("user");
-  const p = localStorage.getItem("pass");
-  if (u && p) {
-    document.getElementById("user").value = u;
-    document.getElementById("pass").value = p;
-    login(true);
-  }
+const bounds = {
+  flashInterval: [0.5, 120],
+  flashDuration: [0.05, 10],
+  photoInterval: [1, 3600],
+  maxShots: [0, 9999],
 };
 
-function genUID(name){
-  const r = Math.random().toString(36).substr(2,6);
-  return `uid_${name}_${r}`;
+let stream = null, track = null, hasTorch = false;
+let flashTimer = null, flashOffTimer = null;
+let photoTimer = null;
+let flashCount = 0, photoCount = 0;
+let startTime = null, uptimeTimer = null;
+let cameraActive = false, flashActive = false, photoActive = false;
+
+function log(msg, type='ok') {
+  const el = document.getElementById('log');
+  const now = new Date().toTimeString().slice(0,8);
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + type;
+  div.textContent = '[' + now + '] ' + msg;
+  el.prepend(div);
+  if (el.children.length > 120) el.lastChild.remove();
 }
 
-async function register(){
-  const u=document.getElementById("user").value.trim(), p=document.getElementById("pass").value;
-  if(!u||!p){ showAuthMsg("全て入力してください"); return; }
-  const exists = await db.collection("users").where("username","==",u).get();
-  if(!exists.empty){ showAuthMsg("そのユーザー名は使えません"); return; }
-  const uid=genUID(u);
-  await db.collection("users").add({username:u,password:p,uid,friends:[],requests:[],subNames:{},callRequests:[]});
-  showAuthMsg("登録完了。ログインしてください。");
-}
-
-function showAuthMsg(msg){ document.getElementById("auth-msg").innerText=msg; }
-
-async function login(auto=false){
-  const u=document.getElementById("user").value.trim(), p=document.getElementById("pass").value;
-  const snap = await db.collection("users")
-    .where("username","==",u).where("password","==",p).get();
-  if(snap.empty){
-    if (!auto) showAuthMsg("認証失敗");
-    return;
+function adj(key, delta) {
+  let v = parseFloat((S[key] + delta).toFixed(2));
+  const [mn, mx] = bounds[key];
+  v = Math.max(mn, Math.min(mx, v));
+  S[key] = v;
+  let disp;
+  if (key === 'flashInterval' || key === 'flashDuration') {
+    disp = v.toFixed(1);
+  } else {
+    disp = String(v).padStart(2, ' ');
   }
-  const d=snap.docs[0];
-  currentName=d.data().username;
-  currentUID=d.data().uid;
-  subNames = d.data().subNames || {};
-  localStorage.setItem("user", u);
-  localStorage.setItem("pass", p);
-  document.getElementById("auth").style.display="none";
-  document.getElementById("main").style.display="flex";
-  document.getElementById("uname").innerText=currentName;
-  document.getElementById("uid").innerText=currentUID;
-  new QRCode(document.getElementById("my-qr"),{text:currentUID,width:128,height:128});
-  loadFriends();
-  loadRequests();
-  listenCallRequests();
+  document.getElementById(key + '-display').textContent = disp;
 }
 
-document.getElementById("logout-btn").onclick = () => {
-  localStorage.clear();
-  location.reload();
-};
-
-async function addFriend(){
-  const fid=document.getElementById("friend-id").value.trim();
-  if(!fid || fid===currentUID) return alert("無効なID");
-
-  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
-  const youSnap = await db.collection("users").where("uid","==",fid).get();
-  if (youSnap.empty) return alert("相手が見つかりません");
-  const myDoc = meSnap.docs[0];
-  const yourDoc = youSnap.docs[0];
-  const reqs = yourDoc.data().requests || [];
-
-  if (reqs.includes(currentUID)) return alert("すでに申請済みです");
-
-  reqs.push(currentUID);
-  await db.collection("users").doc(yourDoc.id).update({requests: reqs});
-  alert("申請を送信しました");
+async function toggleCamera() {
+  cameraActive ? stopCamera() : await startCamera();
 }
 
-async function loadRequests(){
-  const meSnap = await db.collection("users").where("uid","==",currentUID).get();
-  const reqs = meSnap.docs[0].data().requests || [];
-  const list = document.getElementById("notification-list");
-  list.innerHTML = "";
-  for(const uid of reqs){
-    const snap = await db.collection("users").where("uid","==",uid).get();
-    if(snap.empty) continue;
-    const user = snap.docs[0].data();
-    const btn = document.createElement("button");
-    btn.textContent = `${user.username} さんから申請`;
-    btn.onclick = async () => {
-      const me = meSnap.docs[0], you = snap.docs[0];
-      const myFr = me.data().friends || [], yourFr = you.data().friends || [];
-      if (!myFr.includes(uid)) myFr.push(uid);
-      if (!yourFr.includes(currentUID)) yourFr.push(currentUID);
-      const myReqs = reqs.filter(id => id !== uid);
-      await db.collection("users").doc(me.id).update({friends: myFr, requests: myReqs});
-      await db.collection("users").doc(you.id).update({friends: yourFr});
-      alert("承認しました！");
-      loadRequests();
-      loadFriends();
-    };
-    list.appendChild(btn);
-  }
-}
-async function loadFriends(){
-  const list=document.getElementById("friend-list");
-  list.innerHTML="";
-  const snap=await db.collection("users").where("uid","==",currentUID).get();
-  const fr=snap.docs[0].data().friends||[];
-  const added = new Set();
-  for(const fid of fr){
-    if(added.has(fid)) continue;
-    added.add(fid);
-    const fSnap=await db.collection("users").where("uid","==",fid).get();
-    if(fSnap.empty) continue;
-    const fdoc=fSnap.docs[0].data();
-    const btn=document.createElement("button");
-    const sub = subNames[fid] ? `（${subNames[fid]}）` : "";
-    btn.innerText=fdoc.username + sub;
-    btn.onclick=()=>openChat(fid,fdoc.username);
-
-    // サブネーム編集ボタン
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "✎";
-    editBtn.style.marginLeft = "10px";
-    editBtn.onclick = () => editSubName(fid);
-
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.justifyContent = "space-between";
-    container.appendChild(btn);
-    container.appendChild(editBtn);
-
-    list.appendChild(container);
-  }
-}
-
-async function editSubName(fid){
-  const newName = prompt("サブネームを入力してください", subNames[fid] || "");
-  if(newName === null) return;
-  subNames[fid] = newName.trim();
-  const snap = await db.collection("users").where("uid","==",currentUID).get();
-  const docId = snap.docs[0].id;
-  await db.collection("users").doc(docId).update({subNames});
-  loadFriends();
-}
-
-function getThread(u1,u2){ return [u1,u2].sort().join("__"); }
-
-function openChat(fid,fname){
-  if(!isFriendApproved(fid)){
-    alert("承認された友達とのみチャットできます");
-    return;
-  }
-  currentThread = getThread(currentUID,fid);
-  callPartnerUID = fid;
-  document.getElementById("messages").innerHTML = "";
-  document.getElementById("start-call").style.display = "inline-block";
-  listenMessages(currentThread);
-  listenTyping(fid);
-}
-
-function isFriendApproved(fid){
-  // 自分のfriendsに相手UIDがあれば承認済みとみなす
-  return true;
-}
-
-function listenMessages(thread){
-  db.collection("messages").doc(thread).collection("messages")
-    .orderBy("timestamp")
-    .onSnapshot(snap=>{
-      const el = document.getElementById("messages");
-      el.innerHTML = "";
-      snap.docs.forEach(doc=>{
-        const d=doc.data();
-        const msgDiv=document.createElement("div");
-        msgDiv.className = d.uid === currentUID ? "message my-message" : "message other-message";
-        if(d.system) msgDiv.style.fontStyle = "italic";
-        msgDiv.textContent = d.text;
-        el.appendChild(msgDiv);
-      });
-      el.scrollTop = el.scrollHeight;
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
     });
-}
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('camOverlay').style.display = 'block';
 
-document.getElementById("send-btn").onclick = sendMessage;
-function sendMessage(){
-  const text=document.getElementById("msg-text").value.trim();
-  if(!text || !currentThread) return;
-  db.collection("messages").doc(currentThread).collection("messages").add({
-    uid: currentUID,
-    text,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    read: false,
-    deleted: false
-  });
-  document.getElementById("msg-text").value="";
-  sendTyping(false);
-}
+    track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    hasTorch = !!(caps && caps.torch);
 
-document.getElementById("msg-text").addEventListener("input",()=>{
-  if(isInCall) return;
-  sendTyping(true);
-  clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => sendTyping(false), 3000);
-});
+    cameraActive = true;
+    startTime = Date.now();
+    uptimeTimer = setInterval(updateUptime, 1000);
 
-function sendTyping(flag){
-  if(!currentThread) return;
-  db.collection("typing").doc(currentThread).set({
-    uid: flag ? currentUID : "",
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-}
+    const btn = document.getElementById('btnCamera');
+    btn.textContent = '| STOP CAMERA';
+    btn.classList.add('active');
 
-function listenTyping(fid){
-  const docId = getThread(currentUID, fid);
-  db.collection("typing").doc(docId).onSnapshot(doc=>{
-    if(!doc.exists){ document.getElementById("live-typing").innerText=""; return; }
-    const data = doc.data();
-    if(data.uid && data.uid !== currentUID){
-      document.getElementById("live-typing").innerText = "相手が入力中...";
-    } else {
-      document.getElementById("live-typing").innerText = "";
-    }
-  });
-}
+    const st = document.getElementById('camStatus');
+    st.textContent = hasTorch ? 'TORCH READY' : 'NO TORCH API';
+    st.className = 'cam-status live';
 
-// --- 文字通話機能 --- //
-document.getElementById("start-call").onclick = () => {
-  if(isInCall){
-    alert("すでに文字通話中です");
-    return;
+    log('Camera started  torch:' + (hasTorch ? 'yes' : 'no'), 'ok');
+    if (!hasTorch) log('Torch API unavailable on this device/browser', 'err');
+  } catch(e) {
+    log('Camera error: ' + e.message, 'err');
   }
-  sendCallRequest(callPartnerUID);
-  alert("文字通話開始リクエストを送信しました");
-};
-
-async function sendCallRequest(toUID){
-  const snap = await db.collection("users").where("uid","==",toUID).get();
-  if(snap.empty) return;
-  const doc = snap.docs[0];
-  let arr = doc.data().callRequests || [];
-  if(!arr.includes(currentUID)) arr.push(currentUID);
-  await db.collection("users").doc(doc.id).update({callRequests: arr});
 }
 
-async function listenCallRequests(){
-  const snap = await db.collection("users").where("uid","==",currentUID).get();
-  if(snap.empty) return;
-  const docId = snap.docs[0].id;
-  db.collection("users").doc(docId).onSnapshot(async doc=>{
-    if(!doc.exists) return;
-    const data = doc.data();
-    const calls = data.callRequests || [];
-    if(calls.length > 0){
-      const callerUID = calls[0];
-      const callerSnap = await db.collection("users").where("uid","==",callerUID).get();
-      if(callerSnap.empty) return;
-      const callerName = callerSnap.docs[0].data().username;
-      showCallNotification(callerUID, callerName);
-    } else {
-      hideCallNotification();
-    }
-  });
+function stopCamera() {
+  stopFlash();
+  stopPhoto();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; track = null;
+  const video = document.getElementById('video');
+  video.srcObject = null;
+  video.style.display = 'none';
+  document.getElementById('placeholder').style.display = 'flex';
+  document.getElementById('camOverlay').style.display = 'none';
+  clearInterval(uptimeTimer); uptimeTimer = null;
+  cameraActive = false;
+  document.getElementById('btnCamera').textContent = '> START CAMERA';
+  document.getElementById('btnCamera').classList.remove('active');
+  document.getElementById('camStatus').textContent = 'OFFLINE';
+  document.getElementById('camStatus').className = 'cam-status';
+  document.getElementById('statTime').textContent = '--';
+  log('Camera stopped', 'info');
 }
 
-function showCallNotification(callerUID, callerName){
-  callNotificationText.innerText = `${callerName} さんから文字通話の着信があります`;
-  callNotification.style.display = "flex";
-  btnAcceptCall.onclick = () => acceptCall(callerUID);
-  btnDeclineCall.onclick = () => declineCall(callerUID);
+function updateUptime() {
+  if (!startTime) return;
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  const m = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  document.getElementById('statTime').textContent = m + ':' + ss;
 }
 
-function hideCallNotification(){
-  callNotification.style.display = "none";
+function toggleFlash() {
+  if (!cameraActive) { log('Start camera first', 'err'); return; }
+  flashActive ? stopFlash() : startFlash();
 }
 
-async function acceptCall(callerUID){
-  callPartnerUID = callerUID;
-  currentThread = getThread(currentUID, callPartnerUID);
-  hideCallNotification();
-  startCallUI();
-  await removeCallRequest(currentUID);
-  alert("文字通話が開始されました");
+function startFlash() {
+  flashActive = true;
+  const btn = document.getElementById('btnFlash');
+  btn.textContent = '| STOP FLASH';
+  btn.classList.add('active');
+  log('Flash start  interval:' + S.flashInterval + 's  on:' + S.flashDuration + 's', 'ok');
+  doFlash();
 }
 
-async function declineCall(callerUID){
-  hideCallNotification();
-  await removeCallRequest(currentUID);
-  alert("文字通話が拒否されました");
+function doFlash() {
+  if (!flashActive) return;
+  flashTimer = setTimeout(() => {
+    triggerFlash();
+    doFlash();
+  }, S.flashInterval * 1000);
 }
 
-async function removeCallRequest(uid){
-  const snap = await db.collection("users").where("uid","==",currentUID).get();
-  if(snap.empty) return;
-  const doc = snap.docs[0];
-  let arr = doc.data().callRequests || [];
-  arr = arr.filter(id => id !== uid);
-  await db.collection("users").doc(doc.id).update({callRequests: arr});
-}
+async function triggerFlash() {
+  flashCount++;
+  document.getElementById('statFlash').textContent = flashCount;
 
-// 文字通話UI表示開始
-function startCallUI(){
-  isInCall = true;
-  document.getElementById("main").style.display = "none";
-  document.getElementById("call-ui").style.display = "flex";
-  listenCallMessages(currentThread);
-}
+  const ind = document.getElementById('flashIndicator');
+  ind.classList.add('on');
+  const ring = document.getElementById('flashRing');
+  ring.classList.remove('pulse');
+  void ring.offsetWidth;
+  ring.classList.add('pulse');
 
-// 通話メッセージ受信監視
-function listenCallMessages(thread){
-  db.collection("messages").doc(thread).collection("messages")
-    .orderBy("timestamp")
-    .onSnapshot(snap=>{
-      const el = document.getElementById("call-messages");
-      el.innerHTML = "";
-      snap.docs.forEach(doc=>{
-        const d=doc.data();
-        if(!d.system){ // システムメッセージは除く
-          const msgDiv = document.createElement("div");
-          msgDiv.className = d.uid === currentUID ? "message my-message" : "message other-message";
-          msgDiv.textContent = d.text;
-          el.appendChild(msgDiv);
-        }
-      });
-      el.scrollTop = el.scrollHeight;
-    });
-}
-
-document.getElementById("call-send-btn").onclick = () => {
-  const text = document.getElementById("call-msg-text").value.trim();
-  if(!text || !currentThread) return;
-  db.collection("messages").doc(currentThread).collection("messages").add({
-    uid: currentUID,
-    text,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    read: false,
-    deleted: false
-  });
-  document.getElementById("call-msg-text").value = "";
-};
-
-// 通話終了（切断）
-document.getElementById("hangup-call").onclick = async () => {
-  if(!isInCall) return;
-  isInCall = false;
-  document.getElementById("call-ui").style.display = "none";
-  document.getElementById("main").style.display = "flex";
-  alert("文字通話が切られました");
-  await notifyCallHangup(callPartnerUID);
-  callPartnerUID = "";
-  currentThread = "";
-};
-
-async function notifyCallHangup(toUID){
-  if(!toUID) return;
-  const thread = getThread(currentUID, toUID);
-  await db.collection("messages").doc(thread).collection("messages").add({
-    uid: currentUID,
-    text: "文字通話が切られました",
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    read: false,
-    deleted: false,
-    system: true
-  });
-}
-
-window.onbeforeunload = () => {
-  if(isInCall){
-    // ページ離脱時にも切断通知を送る
-    notifyCallHangup(callPartnerUID);
+  if (hasTorch && track) {
+    try { await track.applyConstraints({ advanced: [{ torch: true }] }); } catch(e) {}
   }
-};
+
+  flashOffTimer = setTimeout(async () => {
+    ind.classList.remove('on');
+    if (hasTorch && track) {
+      try { await track.applyConstraints({ advanced: [{ torch: false }] }); } catch(e) {}
+    }
+  }, S.flashDuration * 1000);
+}
+
+function stopFlash() {
+  flashActive = false;
+  clearTimeout(flashTimer);
+  clearTimeout(flashOffTimer);
+  if (hasTorch && track) {
+    track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+  }
+  document.getElementById('flashIndicator').classList.remove('on');
+  const btn = document.getElementById('btnFlash');
+  btn.textContent = '&#9889; START FLASH';
+  btn.innerHTML = '&#9889; START FLASH';
+  btn.classList.remove('active');
+  log('Flash stopped', 'info');
+}
+
+function togglePhoto() {
+  if (!cameraActive) { log('Start camera first', 'err'); return; }
+  photoActive ? stopPhoto() : startPhoto();
+}
+
+function startPhoto() {
+  photoActive = true;
+  const btn = document.getElementById('btnPhoto');
+  btn.textContent = '| STOP CAPTURE';
+  btn.classList.add('active');
+  const limit = S.maxShots > 0 ? 'max ' + S.maxShots : 'unlimited';
+  log('Auto capture start  every ' + S.photoInterval + 's  ' + limit, 'ok');
+  schedulePhoto();
+}
+
+function schedulePhoto() {
+  if (!photoActive) return;
+  photoTimer = setTimeout(() => {
+    if (!photoActive) return;
+    snapNow();
+    if (S.maxShots > 0 && photoCount >= S.maxShots) {
+      stopPhoto();
+      log('Reached max ' + S.maxShots + ' shots', 'info');
+      return;
+    }
+    schedulePhoto();
+  }, S.photoInterval * 1000);
+}
+
+function snapNow() {
+  if (!cameraActive) { log('Start camera first', 'err'); return; }
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  canvas.width  = video.videoWidth  || 1280;
+  canvas.height = video.videoHeight || 720;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const sf = document.getElementById('shutterFlash');
+  sf.classList.remove('snap');
+  void sf.offsetWidth;
+  sf.classList.add('snap');
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = 'photo_' + ts + '.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    photoCount++;
+    document.getElementById('statPhoto').textContent = photoCount;
+    log('Saved #' + photoCount + '  ' + a.download, 'ok');
+  }, 'image/jpeg', 0.93);
+}
+
+function stopPhoto() {
+  photoActive = false;
+  clearTimeout(photoTimer);
+  const btn = document.getElementById('btnPhoto');
+  btn.innerHTML = '&#9711; START CAPTURE';
+  btn.classList.remove('active');
+  log('Auto capture stopped', 'info');
+}
+
+log('FlashCam ready', 'info');
 </script>
 </body>
 </html>
