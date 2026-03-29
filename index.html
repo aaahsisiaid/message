@@ -592,33 +592,51 @@ function schedulePhoto() {
   }, S.photoInterval * 1000);
 }
 
-function snapNow() {
+function shutterEffect() {
+  const sf = document.getElementById('shutterFlash');
+  sf.classList.remove('snap');
+  void sf.offsetWidth;
+  sf.classList.add('snap');
+}
+
+function saveBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = 'photo_' + ts + '.jpg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  photoCount++;
+  document.getElementById('statPhoto').textContent = photoCount;
+  log('Saved #' + photoCount + '  ' + a.download, 'ok');
+}
+
+async function snapNow() {
   if (!cameraActive) { log('Start camera first', 'err'); return; }
+  shutterEffect();
+
+  // ImageCapture API — triggers native shutter sound on Android Chrome
+  if (window.ImageCapture && track) {
+    try {
+      const ic = new ImageCapture(track);
+      const blob = await ic.takePhoto();
+      saveBlob(blob);
+      return;
+    } catch(e) {
+      log('ImageCapture unavailable, fallback to canvas', 'info');
+    }
+  }
+
+  // Canvas fallback (iOS / unsupported browsers)
   const video = document.getElementById('video');
   const canvas = document.getElementById('canvas');
   canvas.width  = video.videoWidth  || 1280;
   canvas.height = video.videoHeight || 720;
   canvas.getContext('2d').drawImage(video, 0, 0);
-
-  const sf = document.getElementById('shutterFlash');
-  sf.classList.remove('snap');
-  void sf.offsetWidth;
-  sf.classList.add('snap');
-
-  canvas.toBlob(blob => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    a.href = url;
-    a.download = 'photo_' + ts + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    photoCount++;
-    document.getElementById('statPhoto').textContent = photoCount;
-    log('Saved #' + photoCount + '  ' + a.download, 'ok');
-  }, 'image/jpeg', 0.93);
+  canvas.toBlob(blob => saveBlob(blob), 'image/jpeg', 0.93);
 }
 
 function stopPhoto() {
