@@ -423,13 +423,20 @@ function log(msg, type='ok') {
 }
 
 function adj(key, delta) {
-  let v = parseFloat((S[key] + delta).toFixed(2));
+  // decimal places = max of current value's and delta's decimals → prevents float drift
+  const dec = Math.max(
+    (S[key].toString().split('.')[1] || '').length,
+    (Math.abs(delta).toString().split('.')[1] || '').length
+  );
+  let v = parseFloat((S[key] + delta).toFixed(dec));
   const [mn, mx] = bounds[key];
   v = Math.max(mn, Math.min(mx, v));
   S[key] = v;
   let disp;
   if (key === 'flashInterval' || key === 'flashDuration') {
-    disp = v.toFixed(1);
+    // show enough decimals to distinguish small values
+    const d = v < 0.1 ? 2 : v < 1 ? 2 : 1;
+    disp = v.toFixed(d);
   } else {
     disp = String(v).padStart(2, ' ');
   }
