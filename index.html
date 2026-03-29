@@ -305,9 +305,9 @@
         </div>
         <div style="display:flex;align-items:center;gap:4px">
           <div class="num-input-wrap">
-            <button class="num-btn" onclick="adj('flashInterval',-0.5)">-</button>
-            <div class="num-display" id="flashInterval-display">2.0</div>
-            <button class="num-btn" onclick="adj('flashInterval',0.5)">+</button>
+            <button class="num-btn" onclick="adj('flashInterval',-0.05)">-</button>
+            <div class="num-display" id="flashInterval-display">0.5</div>
+            <button class="num-btn" onclick="adj('flashInterval',0.05)">+</button>
           </div>
           <span class="num-unit">sec</span>
         </div>
@@ -320,9 +320,9 @@
         </div>
         <div style="display:flex;align-items:center;gap:4px">
           <div class="num-input-wrap">
-            <button class="num-btn" onclick="adj('flashDuration',-0.1)">-</button>
-            <div class="num-display" id="flashDuration-display">0.2</div>
-            <button class="num-btn" onclick="adj('flashDuration',0.1)">+</button>
+            <button class="num-btn" onclick="adj('flashDuration',-0.01)">-</button>
+            <div class="num-display" id="flashDuration-display">0.1</div>
+            <button class="num-btn" onclick="adj('flashDuration',0.01)">+</button>
           </div>
           <span class="num-unit">sec</span>
         </div>
@@ -393,14 +393,14 @@
 
 <script>
 const S = {
-  flashInterval: 2.0,
-  flashDuration: 0.2,
+  flashInterval: 0.5,
+  flashDuration: 0.1,
   photoInterval: 5,
   maxShots: 0,
 };
 const bounds = {
-  flashInterval: [0.5, 120],
-  flashDuration: [0.05, 10],
+  flashInterval: [0.05, 120],
+  flashDuration: [0.01, 10],
   photoInterval: [1, 3600],
   maxShots: [0, 9999],
 };
